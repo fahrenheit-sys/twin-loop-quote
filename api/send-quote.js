@@ -185,13 +185,25 @@ function buildEmailHtml(state, computed) {
     <span style="line-height:2;">${techDetails}</span>
   </div>
 
-  <div style="padding:20px 32px;text-align:center;font-size:12px;color:#777;border-top:1px solid #eee;">
-    <p style="margin:0 0 6px;">Questions? Contact us at
-      <a href="mailto:quotes@twinloop.com.au" style="color:#000;">quotes@twinloop.com.au</a>
-      &nbsp;&bull;&nbsp;
-      <a href="https://www.twinloop.com.au" style="color:#000;">twinloop.com.au</a>
-    </p>
-    <p style="margin:0;font-size:11px;color:#aaa;">All prices in AUD and include GST. Quote valid for 30 days from date of issue. Minimum job cost $50.</p>
+  <div style="padding:20px 32px;border-top:1px solid #eee;font-size:12px;color:#666;">
+    <table style="width:100%;border-collapse:collapse;">
+      <tr>
+        <td style="padding:4px 0;vertical-align:top;width:40%;">
+          <strong>Twin Loop Binding</strong><br>
+          15 Hugh Street<br>
+          Belmore, NSW 2192
+        </td>
+        <td style="padding:4px 0;vertical-align:top;width:30%;">
+          <a href="tel:1300657850" style="color:#000;">1300 657 850</a><br>
+          <a href="mailto:quotes@twinloop.com.au" style="color:#000;">quotes@twinloop.com.au</a><br>
+          <a href="https://www.twinloop.com.au" style="color:#000;">twinloop.com.au</a>
+        </td>
+        <td style="padding:4px 0;vertical-align:top;text-align:right;color:#999;font-size:11px;">
+          ABN 78 082 258 035
+        </td>
+      </tr>
+    </table>
+    <p style="margin:12px 0 0;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:10px;">All prices in AUD and include GST. Quote valid for 30 days from date of issue. Minimum job cost $50.</p>
   </div>
 
 </div>
