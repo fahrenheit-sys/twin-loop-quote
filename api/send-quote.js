@@ -50,6 +50,9 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ success: true, note: 'No email address — quote saved only' });
   }
 
+  const emailHtml = buildEmailHtml(state, computed);
+
+  // Send quote to customer
   const emailRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -57,10 +60,10 @@ module.exports = async function handler(req, res) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      from:    'Twin Loop Binding <quotes@twinloop.com.au>',
+      from:    'Twin Loop Binding <webquote@quote.twinloop.online>',
       to:      [state.customerEmail],
       subject: `Your Quote ${state.quoteNumber} — Twin Loop Binding`,
-      html:    buildEmailHtml(state, computed)
+      html:    emailHtml
     })
   });
 
@@ -69,6 +72,21 @@ module.exports = async function handler(req, res) {
     console.error('Resend error:', err);
     return res.status(500).json({ error: 'Email failed', detail: err });
   }
+
+  // Send internal notification to Twin Loop
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from:    'Quote Tool <webquote@quote.twinloop.online>',
+      to:      ['quotes@twinloop.com.au'],
+      subject: `New Quote ${state.quoteNumber} — ${state.customerName || 'Unknown'} ${state.customerCompany ? '(' + state.customerCompany + ')' : ''}`.trim(),
+      html:    emailHtml
+    })
+  });
 
   return res.status(200).json({ success: true });
 };
