@@ -1,30 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Twin Loop Quote Tool</title>
+</head>
+<body>
+
 <div id="quote-app-root" style="max-width: 850px; margin: 20px auto; border: 1px solid #ddd; border-radius: 12px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; background: #fff; color: #000; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
     <div style="background: #f8f9fa; padding: 15px; border-bottom: 1px solid #ddd; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
         <span>Twin Loop Multi-Quantity Assistant</span>
-        <button id="back-btn" style="display: none; background: #000; border: 1px solid #fff; color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;" onclick="window.tlGoBack()">&larr; Back</button>
+        <button id="back-btn" style="display: none; background: #000; border: 1px solid #fff; color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">&larr; Back</button>
     </div>
 
     <div id="chat-window" style="min-height: 80px; padding: 25px; display: flex; flex-direction: column; justify-content: center; text-align: center;">
-        <div id="active-question-container" style="font-size: 18px; font-weight: 500;">Loading...</div>
+        <div id="active-question-container" style="font-size: 18px; font-weight: 500;">Initializing...</div>
     </div>
 
     <div id="input-area" style="padding: 20px; border-top: 1px solid #eee; background: #fdfdfd; min-height: 150px;">
         <div id="button-space" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;"></div>
-        
+
         <div id="multi-qty-space" style="display: none; flex-direction: column; gap: 15px; max-width: 400px; margin: 0 auto;">
-            <p style="font-size: 13px; color: #666; margin: 0;">Enter up to 4 quantities (separated by commas or spaces):</p>
+            <p style="font-size: 13px; color: #666; margin: 0;">Enter up to 4 quantities (separated by commas):</p>
             <input type="text" id="manual-qtys" placeholder="e.g. 100, 500, 1000, 5000" style="padding: 12px; border: 1px solid #000; border-radius: 4px; font-size: 16px; text-align: center;">
-            <button style="padding: 12px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="window.tlSubmitQuantities()">Confirm Quantities &rarr;</button>
+            <button id="submit-qtys" style="padding: 12px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Confirm Quantities &rarr;</button>
         </div>
 
         <div id="cover-dashboard" style="display: none; flex-direction: column; gap: 20px;">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div style="padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fff;">
                     <h4 style="margin: 0 0 10px 0;">Front Cover</h4>
-                    <select id="f-type" style="width: 100%; padding: 8px; margin-bottom: 10px;" onchange="window.updateCoverUI()"></select>
+                    <select id="f-type" style="width: 100%; padding: 8px; margin-bottom: 10px;" onchange="updateCoverUI()"></select>
                     <div id="f-src-wrap">
                         <label style="font-size: 11px; font-weight: bold;">Supplier:</label>
-                        <select id="f-source" style="width: 100%; padding: 8px; margin-bottom: 10px;" onchange="window.updateCoverUI()">
+                        <select id="f-source" style="width: 100%; padding: 8px; margin-bottom: 10px;" onchange="updateCoverUI()">
                             <option value="Twin Loop">Twin Loop</option>
                             <option value="Client Supplied">Client Supplied</option>
                         </select>
@@ -39,10 +48,10 @@
                 </div>
                 <div style="padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fff;">
                     <h4 style="margin: 0 0 10px 0;">Back Cover</h4>
-                    <select id="b-type" style="width: 100%; padding: 8px; margin-bottom: 10px;" onchange="window.updateCoverUI()"></select>
+                    <select id="b-type" style="width: 100%; padding: 8px; margin-bottom: 10px;" onchange="updateCoverUI()"></select>
                     <div id="b-src-wrap">
                         <label style="font-size: 11px; font-weight: bold;">Supplier:</label>
-                        <select id="b-source" style="width: 100%; padding: 8px; margin-bottom: 10px;" onchange="window.updateCoverUI()">
+                        <select id="b-source" style="width: 100%; padding: 8px; margin-bottom: 10px;" onchange="updateCoverUI()">
                             <option value="Twin Loop">Twin Loop</option>
                             <option value="Client Supplied">Client Supplied</option>
                         </select>
@@ -56,7 +65,7 @@
                     </div>
                 </div>
             </div>
-            <button style="padding: 15px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="window.tlSubmitCoversDashboard()">Continue &rarr;</button>
+            <button id="submit-covers" style="padding: 15px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Continue &rarr;</button>
         </div>
 
         <div id="number-space" style="display: none; flex-direction: column; gap: 10px; max-width: 400px; margin: 0 auto;">
@@ -64,355 +73,326 @@
                 <span id="label-1" style="font-size: 14px; min-width: 100px; font-weight: bold;">Value:</span>
                 <input type="number" id="manual-number" style="flex: 1; padding: 10px; border: 1px solid #000; border-radius: 4px; font-size: 16px;" min="0">
             </div>
-            <button style="padding: 10px 25px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" onclick="window.tlSubmitNumericValue()">Continue &rarr;</button>
+            <button id="submit-number" style="padding: 10px 25px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Continue &rarr;</button>
         </div>
     </div>
 </div>
 
 <script>
-(function() {
-    const db = {
-        "binding-costs": {
-            "Wire Binding": {
-                "Standard Wire binding": {
-                    "A6": {"1/4 in": 1.0, "5/16 in": 1.1, "3/8 in": 1.2, "7/16 in": 1.3, "1/2 in": 1.5},
-                    "A5": {"1/4 in": 0.9, "5/16 in": 1.0, "3/8 in": 1.3, "7/16 in": 1.5, "1/2 in": 1.7},
-                    "A4": {"1/4 in": 1.0, "5/16 in": 1.2, "3/8 in": 1.4, "7/16 in": 1.6, "1/2 in": 1.8, "9/16 in": 1.95, "5/8 in": 2.2, "3/4 in": 2.4, "7/8 in": 2.6, "1 in": 2.8, "1 1/2 in": 5.5},
-                    "A3": {"1/4 in": 1.6, "5/16 in": 1.8, "3/8 in": 2.0, "7/16 in": 2.2, "1/2 in": 2.4},
-                    "B5": {"1/4 in": 1.0, "5/16 in": 1.2, "3/8 in": 1.4, "7/16 in": 1.6}
-                },
-                "Calendar with hanger": {"A6":{"1/4 in":1.0},"A5":{"1/4 in":1.0},"A4":{"1/4 in":1.2},"A3":{"1/4 in":1.7}},
-                "Calendar with tent stand": {"A6":{"1/4 in":1.2},"A5":{"1/4 in":1.2},"A4":{"1/4 in":1.3}},
-                "Hard Cover":{"A4": {"1/4 in": 1.0}, "A5": {"1/4 in": 0.9}}
+const db = {
+    "binding-costs": {
+        "Wire Binding": {
+            "Standard Wire binding": {
+                "A6": {"1/4\"": 1.0, "5/16\"": 1.1, "3/8\"": 1.2, "7/16\"": 1.3, "1/2\"": 1.5},
+                "A5": {"1/4\"": 0.9, "5/16\"": 1.0, "3/8\"": 1.3, "7/16\"": 1.5, "1/2\"": 1.7},
+                "A4": {"1/4\"": 1.0, "5/16\"": 1.2, "3/8\"": 1.4, "7/16\"": 1.6, "1/2\"": 1.8, "9/16\"": 1.95, "5/8\"": 2.2, "3/4\"": 2.4, "7/8\"": 2.6, "1\"": 2.8, "1 1/8\"": 4.0, "1 1/4\"": 4.5, "1 1/2\"": 5.5},
+                "A3": {"1/4\"": 1.6, "5/16\"": 1.8, "3/8\"": 2.0, "7/16\"": 2.2, "1/2\"": 2.4},
+                "B5": {"1/4\"": 1.0, "5/16\"": 1.2, "3/8\"": 1.4, "7/16\"": 1.6}
             },
-            "Plastic Spiral": { "-": { "A4": {"1/4 in": 1.2, "3/8 in": 1.4, "1/2 in": 1.8} }},
-            "Comb": { "-": { "A4": {"1/4 in": 1.1} }},
-            "Perfect Binding": {
-                "Regular (EVA) Glue": {"A5": 1.2, "B5": 1.2, "A4": 1.2},
-                "Robust (PUR) Glue": {"A5": 1.25, "B5": 1.25, "A4": 1.25}
-            },
-            "Case Binding": { "-": { "A4": 28.95, "A5": 28.95 } }
+            "Calendar with hanger": {"A6":{"1/4\"":1.0},"A5":{"1/4\"":1.0},"A4":{"1/4\"":1.2},"A3":{"1/4\"":1.7}},
+            "Calendar with tent stand": {"A6":{"1/4\"":1.2},"A5":{"1/4\"":1.2},"A4":{"1/4\"":1.3}},
+            "Hard Cover":{"A4": {"1/4\"": 1.0}, "A5": {"1/4\"": 0.9}}
         },
-        "gsm": [
-            {"GSM":80,"MM":0.116}, {"GSM":90,"MM":0.128}, {"GSM":100,"MM":0.14}, {"GSM":115,"MM":0.16}, {"GSM":120,"MM":0.17},
-            {"GSM":140,"MM":0.2}, {"GSM":150,"MM":0.21}, {"GSM":170,"MM":0.22}, {"GSM":180,"MM":0.23}, {"GSM":200,"MM":0.224},
-            {"GSM":250,"MM":0.295}, {"GSM":300,"MM":0.3}, {"GSM":400,"MM":0.41}, {"GSM":600,"MM":0.6}
-        ],
-        "covers": {
-            "PVC": {"A6": 0.10, "A5": 0.10, "A4": 0.20, "A3": 0.35, "B5": 0.20, "mm": 0.6},
-            "Frosted": {"A6": 0.10, "A5": 0.10, "A4": 0.25, "A3": 0.40, "B5": 0.25, "mm": 0.6},
-            "Poly Prop (0.6mm)": {"A6": 0.20, "A5": 0.25, "A4": 0.45, "A3": 0.70, "B5": 0.45, "mm": 0.6},
-            "Leathergrain": {"A6": 0.10, "A5": 0.10, "A4": 0.20, "A3": 0.35, "B5": 0.20, "mm": 0.6},
-            "Plain Backing": {"A6": 0.10, "A5": 0.10, "A4": 0.20, "A3": 0.35, "B5": 0.20, "mm": 0}
+        "Plastic Spiral": { "-": { "A4": {"1/4\"": 1.2, "3/8\"": 1.4, "1/2\"": 1.8} }},
+        "Comb": { "-": { "A4": {"1/4\"": 1.1} }},
+        "Prefect Binding": {
+            "Regular (EVA) Glue": {"A5": 1.2, "B5": 1.2, "A4": 1.2},
+            "Robust (PUR) Glue": {"A5": 1.25, "B5": 1.25, "A4": 1.25}
         },
-        "imperial": [{"Min": 0, "Max": 6.4, "Wire": "1/4 in"}, {"Min": 6.41, "Max": 8.0, "Wire": "5/16 in"}, {"Min": 8.01, "Max": 9.5, "Wire": "3/8 in"}, {"Min": 9.51, "Max": 11.0, "Wire": "7/16 in"}, {"Min": 11.01, "Max": 12.7, "Wire": "1/2 in"}, {"Min": 12.71, "Max": 14.3, "Wire": "9/16 in"}, {"Min": 14.31, "Max": 38.0, "Wire": "1 1/2 in"}],
-        "volume-discount": [{"Start": 1, "End": 50, "Rate": 0}, {"Start": 51, "End": 500, "Rate": 5}, {"Start": 501, "End": 2000, "Rate": 10}, {"Start": 2001, "End": 5000, "Rate": 15}, {"Start": 5001, "End": 10000, "Rate": 20}, {"Start": 10001, "End": 99999, "Rate": 25}],
-        "cello-glazing": [{"label":"Gloss - Single", "cost": 0.20}, {"label":"Matt - Single", "cost": 0.25}, {"label":"Soft Touch - Single", "cost": 0.60}],
-        "extras": [
-            {"name":"Drilling","cost":0.15, "exclude":["Case", "Perfect"]},
-            {"name":"Spooning","cost":0.20, "exclude":["Case", "Perfect"]},
-            {"name":"Stripping","cost":0.20, "exclude":["Case", "Perfect"]},
-            {"name":"Ribbons","cost":1.00, "only":["Case"]},
-            {"name":"Foiling","cost":1.00, "only":["Case"]},
-            {"name":"DeBossing","cost":1.00, "only":["Case"]}
-        ]
+        "Case Binding": { "-": { "A4": 28.95, "A5": 28.95 } }
+    },
+    "gsm": [
+        {"GSM":80,"MM":0.116}, {"GSM":90,"MM":0.128}, {"GSM":100,"MM":0.14}, {"GSM":115,"MM":0.16}, {"GSM":120,"MM":0.17},
+        {"GSM":140,"MM":0.2}, {"GSM":150,"MM":0.21}, {"GSM":170,"MM":0.22}, {"GSM":180,"MM":0.23}, {"GSM":200,"MM":0.224},
+        {"GSM":250,"MM":0.295}, {"GSM":300,"MM":0.3}, {"GSM":400,"MM":0.41}, {"GSM":600,"MM":0.6}
+    ],
+    "covers": {
+        "PVC": {"A6": 0.10, "A5": 0.10, "A4": 0.20, "A3": 0.35, "B5": 0.20, "mm": 0.6},
+        "Frosted": {"A6": 0.10, "A5": 0.10, "A4": 0.25, "A3": 0.40, "B5": 0.25, "mm": 0.6},
+        "Poly Prop (0.6mm)": {"A6": 0.20, "A5": 0.25, "A4": 0.45, "A3": 0.70, "B5": 0.45, "mm": 0.6},
+        "Leathergrain": {"A6": 0.10, "A5": 0.10, "A4": 0.20, "A3": 0.35, "B5": 0.20, "mm": 0.6},
+        "Plain Backing": {"A6": 0.10, "A5": 0.10, "A4": 0.20, "A3": 0.35, "B5": 0.20, "mm": 0}
+    },
+    "imperial": [
+        {"Min": 0, "Max": 6.4, "Wire": "1/4\""},
+        {"Min": 6.41, "Max": 8.0, "Wire": "5/16\""},
+        {"Min": 8.01, "Max": 9.5, "Wire": "3/8\""},
+        {"Min": 9.51, "Max": 11.0, "Wire": "7/16\""},
+        {"Min": 11.01, "Max": 12.7, "Wire": "1/2\""},
+        {"Min": 12.71, "Max": 14.3, "Wire": "9/16\""},
+        {"Min": 14.31, "Max": 38.0, "Wire": "1 1/2\""}
+    ],
+    "volume-discount": [
+        {"Start": 1, "End": 50, "Rate": 0},
+        {"Start": 51, "End": 500, "Rate": 5},
+        {"Start": 501, "End": 2000, "Rate": 10},
+        {"Start": 2001, "End": 5000, "Rate": 15},
+        {"Start": 5001, "End": 10000, "Rate": 20},
+        {"Start": 10001, "End": 99999, "Rate": 25}
+    ],
+    "cello-glazing": [
+        {"label":"Gloss - Single", "cost": 0.20},
+        {"label":"Matt - Single", "cost": 0.25},
+        {"label":"Soft Touch - Single", "cost": 0.60}
+    ],
+    "extras": [
+        {"name":"Drilling","cost":0.15, "exclude":["Case", "Prefect"]},
+        {"name":"Spooning","cost":0.20, "exclude":["Case", "Prefect"]},
+        {"name":"Stripping","cost":0.20, "exclude":["Case", "Prefect"]},
+        {"name":"Ribbons","cost":1.00, "only":["Case"]},
+        {"name":"Foiling","cost":1.00, "only":["Case"]},
+        {"name":"DeBossing","cost":1.00, "only":["Case"]}
+    ]
+};
+
+let state = {};
+
+function initDefaults() {
+    state = {
+        step: 0, qtys: [], leafSize: '', leafCount: 0, leafMM: 0, leafGSMValue: 0,
+        frontCoverName: 'None', frontCoverMM: 0, frontCoverCost: 0, frontSource: 'Twin Loop', frontCollated: 'Yes',
+        backCoverName: 'None', backCoverMM: 0, backCoverCost: 0, backSource: 'Twin Loop', backCollated: 'Yes',
+        celloType: 'No', celloCost: 0, hasInserts: 'No', qtyTabs: 0, qtyExtraSheets: 0,
+        selectedExtras: [], bindCategory: '', bindSubtype: '', history: []
     };
+}
 
-    let state = {};
-    const steps = [
-        { id: "bindCategory", q: "Select Category:", type: "button", source: "bindCategory" },
-        { id: "bindSubtype", q: "Select Style:", type: "button", source: "bindSubtype" },
-        { id: "qtys", q: "Quantities Required:", type: "multi-qty" },
-        { id: "leafSize", q: "Leaf Size:", type: "button", source: "leafSizes" },
-        { id: "leafCount", q: "Internal sheets per book?", type: "number" },
-        { id: "gsm", q: "Paper GSM:", type: "button", source: "gsm" },
-        { id: "coverDashboard", q: "Configure Covers:", type: "cover-dash", condition: function() { return state.bindCategory && !state.bindCategory.includes('Perfect') && !state.bindCategory.includes('Case'); } },
-        { id: "celloType", q: "Apply Single-Sided Glazing?", type: "button", source: "celloTypes", condition: function() { return state.bindCategory && state.bindCategory.includes('Perfect'); } },
-        { id: "hasInserts", q: "Add any Inserts?", type: "button", options: ["Yes", "No"], condition: function() { return state.bindCategory && !state.bindCategory.includes('Case'); } },
-        { id: "qtyTabs", q: "Number of Tabs?", type: "number", condition: function() { return state.hasInserts === "Yes" && state.bindCategory && !state.bindCategory.includes('Case'); } },
-        { id: "qtyExtraSheets", q: "Number of Extra Sheets?", type: "number", condition: function() { return state.hasInserts === "Yes" && state.bindCategory && !state.bindCategory.includes('Case'); } },
-        { id: "extras", q: "Production Extras:", type: "multiselect" },
-        { id: "calculate", q: "Processing Quote...", type: "result" }
-    ];
+const steps = [
+    { id: "bindCategory", q: "Select Category:", type: "button", source: "bindCategory" },
+    { id: "bindSubtype", q: "Select Style:", type: "button", source: "bindSubtype" },
+    { id: "qtys", q: "Quantities Required:", type: "multi-qty" },
+    { id: "leafSize", q: "Leaf Size:", type: "button", source: "leafSizes" },
+    { id: "leafCount", q: "Internal sheets per book?", type: "number" },
+    { id: "gsm", q: "Paper GSM:", type: "button", source: "gsm" },
+    { id: "coverDashboard", q: "Configure Covers:", type: "cover-dash", condition: () => !state.bindCategory.includes('Prefect') && !state.bindCategory.includes('Case') },
+    { id: "celloType", q: "Apply Single-Sided Glazing?", type: "button", source: "celloTypes", condition: () => state.bindCategory.includes('Prefect') },
+    { id: "hasInserts", q: "Add any Inserts?", type: "button", options: ["Yes", "No"], condition: () => !state.bindCategory.includes('Case') },
+    { id: "qtyTabs", q: "Number of Tabs?", type: "number", condition: () => state.hasInserts === "Yes" && !state.bindCategory.includes('Case') },
+    { id: "qtyExtraSheets", q: "Number of Extra Sheets?", type: "number", condition: () => state.hasInserts === "Yes" && !state.bindCategory.includes('Case') },
+    { id: "extras", q: "Production Extras:", type: "multiselect" },
+    { id: "calculate", q: "Processing Quote...", type: "result" }
+];
 
-    function initDefaults() {
-        state = { 
-            step: 0, qtys: [], leafSize: '', leafCount: 0, leafMM: 0, leafGSMValue: 0,
-            frontCoverName: 'None', frontCoverMM: 0, frontCoverCost: 0, frontSource: 'Twin Loop', frontCollated: 'Yes',
-            backCoverName: 'None', backCoverMM: 0, backCoverCost: 0, backSource: 'Twin Loop', backCollated: 'Yes',
-            celloType: 'No', celloCost: 0, hasInserts: 'No', qtyTabs: 0, qtyExtraSheets: 0, selectedExtras: [], bindCategory: '', bindSubtype: '', history: []
-        };
+function updateCoverUI() {
+    const ft = document.getElementById('f-type').value, bt = document.getElementById('b-type').value;
+    document.getElementById('f-src-wrap').style.display = (ft === 'None') ? 'none' : 'block';
+    document.getElementById('b-src-wrap').style.display = (bt === 'None') ? 'none' : 'block';
+    document.getElementById('f-coll-wrap').style.display = (document.getElementById('f-source').value === 'Client Supplied' && ft !== 'None') ? 'block' : 'none';
+    document.getElementById('b-coll-wrap').style.display = (document.getElementById('b-source').value === 'Client Supplied' && bt !== 'None') ? 'block' : 'none';
+}
+
+function render() {
+    if (state.step >= steps.length) return;
+    const current = steps[state.step];
+    if (current.id === "bindSubtype") {
+        const styles = Object.keys(db['binding-costs'][state.bindCategory] || {});
+        if (styles.length === 1 && styles[0] === "-") { state.bindSubtype = "-"; state.step++; return render(); }
     }
+    if (current.condition && !current.condition()) { state.step++; return render(); }
 
-    window.updateCoverUI = function() {
-        const fEl = document.getElementById('f-type');
-        const bEl = document.getElementById('b-type');
-        if (!fEl || !bEl) return;
-        const ft = fEl.value, bt = bEl.value;
-        document.getElementById('f-src-wrap').style.display = (ft === 'None') ? 'none' : 'block';
-        document.getElementById('b-src-wrap').style.display = (bt === 'None') ? 'none' : 'block';
-        document.getElementById('f-coll-wrap').style.display = (document.getElementById('f-source').value === 'Client Supplied' && ft !== 'None') ? 'block' : 'none';
-        document.getElementById('b-coll-wrap').style.display = (document.getElementById('b-source').value === 'Client Supplied' && bt !== 'None') ? 'block' : 'none';
-    };
+    document.getElementById('active-question-container').innerText = current.q;
+    const bSpace = document.getElementById('button-space');
+    const nSpace = document.getElementById('number-space');
+    const mSpace = document.getElementById('multi-qty-space');
+    const dSpace = document.getElementById('cover-dashboard');
+    [bSpace, nSpace, mSpace, dSpace].forEach(s => s.style.display = 'none');
+    document.getElementById('back-btn').style.display = (state.history.length > 0) ? 'block' : 'none';
 
-    window.tlGoBack = function() {
-        if (state.history && state.history.length > 0) {
-            state.step = state.history.pop();
-            renderEngine();
-        }
-    };
-
-    window.tlSubmitQuantities = function() {
-        const val = document.getElementById('manual-qtys').value;
-        const qtys = val.split(/[\s,]+/).map(v => parseInt(v)).filter(v => v > 0).slice(0, 4);
-        if (qtys.length > 0) {
-            state.history.push(state.step);
-            state.qtys = qtys;
-            state.step++;
-            renderEngine();
-        }
-    };
-
-    window.tlSubmitNumericValue = function() {
-        const v = document.getElementById('manual-number').value;
-        if (v !== "") {
-            state.history.push(state.step);
-            const num = parseFloat(v);
-            const stepId = steps[state.step].id;
-            state[stepId] = num;
-            state.step++;
-            document.getElementById('manual-number').value = '';
-            renderEngine();
-        }
-    };
-
-    window.tlSubmitCoversDashboard = function() {
-        state.history.push(state.step);
-        const fK = document.getElementById('f-type').value, bK = document.getElementById('b-type').value;
-        state.frontCoverName = fK; state.backCoverName = bK;
-        state.frontCoverCost = (fK !== 'None') ? parseFloat(db.covers[fK][state.leafSize] || 0) : 0;
-        state.backCoverCost = (bK !== 'None') ? parseFloat(db.covers[bK][state.leafSize] || 0) : 0;
-        state.frontCoverMM = (fK !== 'None') ? parseFloat(db.covers[fK].mm || 0) : 0;
-        state.backCoverMM = (bK !== 'None') ? parseFloat(db.covers[bK].mm || 0) : 0;
-        state.frontSource = document.getElementById('f-source').value; 
-        state.frontCollated = document.getElementById('f-collated').value;
-        state.backSource = document.getElementById('b-source').value; 
-        state.backCollated = document.getElementById('b-collated').value;
-        state.step++;
-        renderEngine();
-    };
-
-    window.tlHandleButtonClick = function(val) {
-        state.history.push(state.step);
-        const currentStep = steps[state.step];
-        if (currentStep.id === "gsm") {
-            state.leafGSMValue = parseFloat(val.GSM);
-            state.leafMM = parseFloat(val.MM);
-        } else if (currentStep.id === "celloType") {
-            state.celloType = val.label;
-            state.celloCost = parseFloat(val.cost);
-        } else {
-            state[currentStep.id] = val;
-        }
-        state.step++;
-        renderEngine();
-    };
-
-    function renderEngine() {
-        if (state.step >= steps.length) return;
-        const current = steps[state.step];
-        
-        if (current.id === "bindSubtype") {
-            const styles = Object.keys(db['binding-costs'][state.bindCategory] || {});
-            if (styles.length === 1 && styles[0] === "-") {
-                state.bindSubtype = "-";
-                state.step++;
-                return renderEngine();
-            }
-        }
-        if (current.condition && !current.condition()) {
-            state.step++;
-            return renderEngine();
-        }
-
-        document.getElementById('active-question-container').innerText = current.q;
-        const bSpace = document.getElementById('button-space'), nSpace = document.getElementById('number-space'), mSpace = document.getElementById('multi-qty-space'), dSpace = document.getElementById('cover-dashboard');
-        
-        [bSpace, nSpace, mSpace, dSpace].forEach(s => s.style.display = 'none');
-        document.getElementById('back-btn').style.display = (state.history.length > 0) ? 'block' : 'none';
-
-        if (current.type === "button") {
-            bSpace.innerHTML = '';
-            bSpace.style.display = 'flex';
-            let opts = [];
-            if (current.source === "bindCategory") opts = Object.keys(db['binding-costs']).map(k => ({ label: k, val: k }));
-            else if (current.source === "bindSubtype") opts = Object.keys(db['binding-costs'][state.bindCategory] || {}).map(k => ({ label: k, val: k }));
-            else if (current.source === "leafSizes") {
-                if (state.bindCategory.includes('Perfect')) opts = ["A5", "B5", "A4"].map(s => ({label: s, val: s}));
-                else opts = Object.keys(db['binding-costs'][state.bindCategory][state.bindSubtype] || {}).map(s => ({ label: s, val: s }));
-            }
-            else if (current.source === "gsm") opts = db.gsm.map(i => ({ label: i.GSM + 'gsm', val: i }));
-            else if (current.source === "celloTypes") opts = [{label:"No", val:{label:"No", cost:0}}, ...db['cello-glazing'].map(c => ({label: c.label, val: c}))];
-            else if (current.options) opts = current.options.map(o => ({ label: o, val: o }));
-
-            opts.forEach(opt => {
-                const btn = document.createElement('button');
-                btn.innerText = opt.label;
-                btn.style.cssText = `padding: 10px; border: 1px solid #000; background: #fff; color: #000; cursor: pointer; border-radius: 4px; font-weight: bold; margin: 4px;`;
-                btn.onclick = function() { window.tlHandleButtonClick(opt.val); };
-                bSpace.appendChild(btn);
-            });
-        } else if (current.type === "multi-qty") {
-            mSpace.style.display = 'flex';
-        } else if (current.type === "cover-dash") {
-            dSpace.style.display = 'flex';
-            ['f-type', 'b-type'].forEach(id => {
-                const sel = document.getElementById(id);
-                if (sel.options.length === 0) {
-                    sel.add(new Option("None", "None"));
-                    Object.keys(db.covers).forEach(k => sel.add(new Option(k, k)));
-                }
-            });
-            window.updateCoverUI();
-        } else if (current.type === "multiselect") {
-            bSpace.innerHTML = '';
-            bSpace.style.display = 'flex';
-            let list = db.extras.filter(e => {
-                if (e.exclude && e.exclude.some(cat => state.bindCategory.includes(cat))) return false;
-                if (e.only && !e.only.some(cat => state.bindCategory.includes(cat))) return false;
-                return true;
-            });
-            
-            const activeList = [...list, { name: "Collating General" }];
-            activeList.forEach(item => {
-                const isSel = state.selectedExtras.some(e => e.name === item.name);
-                const btn = document.createElement('button');
-                btn.innerText = item.name;
-                btn.style.cssText = `padding: 10px; border: 1px solid #000; background: ${isSel ? '#000' : '#fff'}; color: ${isSel ? '#fff' : '#000'}; cursor: pointer; border-radius: 4px; font-weight: bold; margin: 4px;`;
-                btn.onclick = function() {
-                    if(isSel) state.selectedExtras = state.selectedExtras.filter(e => e.name !== item.name);
-                    else state.selectedExtras.push(item);
-                    renderEngine();
-                };
-                bSpace.appendChild(btn);
-            });
-
-            const finalizeBtn = document.createElement('button');
-            finalizeBtn.innerText = "Finalize Quote \u2192";
-            finalizeBtn.style.cssText = `padding: 12px; border: 1px solid #000; background: #000; color: #fff; cursor: pointer; border-radius: 4px; font-weight: bold; width: 100%; margin-top: 10px;`;
-            finalizeBtn.onclick = function() {
-                state.history.push(state.step);
-                state.step++;
-                renderEngine();
-            };
-            bSpace.appendChild(finalizeBtn);
-        } else if (current.type === "number") {
-            nSpace.style.display = 'flex';
-            document.getElementById('label-1').innerText = (current.id === "leafCount" ? "Sheets:" : "Value:");
-        } else if (current.type === "result") {
-            runCalculations();
-        }
-    }
-
-    function runCalculations() {
-        const fM = (val) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-        const leafCount = parseFloat(state.leafCount || 0);
-        const spineMetric = (leafCount * state.leafMM) + state.frontCoverMM + state.backCoverMM;
-        const wireSize = (db.imperial.find(r => spineMetric <= r['Max']) || db.imperial[db.imperial.length-1])['Wire'];
-        
-        let bindUnit = 0;
-        if (state.bindCategory.includes('Perfect')) bindUnit = parseFloat(db['binding-costs'][state.bindCategory][state.bindSubtype][state.leafSize] || 0);
-        else if (state.bindCategory.includes('Case')) bindUnit = parseFloat(db['binding-costs'][state.bindCategory]['-'][state.leafSize] || 28.95);
-        else bindUnit = parseFloat(db['binding-costs'][state.bindCategory][state.bindSubtype][state.leafSize][wireSize] || 0);
-        
-        let fSurcharge = (state.frontCoverName !== 'None' && state.frontSource === "Client Supplied" && state.frontCollated === "No") ? 0.10 : 0;
-        let bSurcharge = (state.backCoverName !== 'None' && state.backSource === "Client Supplied" && state.backCollated === "No") ? 0.10 : 0;
-        let tabUnit = parseFloat(state.qtyTabs || 0) * 0.15;
-        let sheetUnit = parseFloat(state.qtyExtraSheets || 0) * 0.15;
-        let punchUnit = (!state.bindCategory.includes('Case') && parseFloat(state.qtyTabs) > 0) ? (spineMetric <= 14 ? 0.10 : 0.20) : 0;
-
-        let items = [
-            { label: `Binding Base (${state.leafSize}${!state.bindCategory.includes('Perfect') && !state.bindCategory.includes('Case') ? ', ' + wireSize : ''})`, unit: bindUnit, active: true },
-            { label: `Front Cover: ${state.frontCoverName} (${state.frontSource})`, unit: (state.frontSource === "Twin Loop" ? state.frontCoverCost : 0) + fSurcharge, active: state.frontCoverName !== 'None' },
-            { label: `Back Cover: ${state.backCoverName} (${state.backSource})`, unit: (state.backSource === "Twin Loop" ? state.backCoverCost : 0) + bSurcharge, active: state.backCoverName !== 'None' },
-            { label: `Cello Glazing: ${state.celloType}`, unit: state.celloCost, active: state.celloCost > 0 },
-            { label: `Index Tabs (${state.qtyTabs} units)`, unit: tabUnit, active: tabUnit > 0 },
-            { label: `Extra Sheets (${state.qtyExtraSheets} units)`, unit: sheetUnit, active: sheetUnit > 0 },
-            { label: `Hand Punching Surcharge`, unit: punchUnit, active: punchUnit > 0 }
-        ];
-        
-        state.selectedExtras.forEach(e => { 
-            if (e.name !== "Collating General") {
-                let cost = db.extras.find(dbE => dbE.name === e.name)?.cost || 0;
-                if(cost) items.push({ label: e.name, unit: cost, active: true }); 
+    if (current.type === "button") {
+        bSpace.innerHTML = '';
+        bSpace.style.display = 'flex';
+        getOptions(current).forEach(opt => bSpace.appendChild(createBtn(opt.label, () => handleInput(opt.val))));
+    } else if (current.type === "multi-qty") {
+        mSpace.style.display = 'flex';
+    } else if (current.type === "cover-dash") {
+        dSpace.style.display = 'flex';
+        ['f-type', 'b-type'].forEach(id => {
+            const sel = document.getElementById(id);
+            if (sel.options.length === 0) {
+                sel.add(new Option("None", "None"));
+                Object.keys(db.covers).forEach(k => sel.add(new Option(k, k)));
             }
         });
-
-        let html = `<div style="text-align:left; font-size: 11px;">
-            <div style="background:#000; color:#fff; padding:15px; border-radius:8px; margin-bottom:15px; text-align:center;">
-                <div style="font-size:10px; opacity:0.8;">ITEMIZED MULTI-QUANTITY QUOTE</div><div style="font-size:22px; font-weight:bold;">${state.bindCategory}</div>
-            </div>
-            <div style="overflow-x: auto;"><table style="width:100%; border-collapse:collapse; margin-bottom: 20px;">
-                <tr style="background: #f2f2f2; font-weight: bold; border-bottom: 2px solid #000;"><td style="padding: 8px;">Description</td>${state.qtys.map(q => `<td style="text-align: right; padding: 8px;">Qty ${q}</td>`).join('')}</tr>
-                ${items.filter(i => i.active).map(i => `<tr><td style="padding: 4px;">${i.label}</td>${state.qtys.map(q => `<td style="text-align: right;">$${fM(i.unit * q)}</td>`).join('')}</tr>`).join('')}
-                ${state.selectedExtras.some(e => e.name === "Collating General") ? `<tr><td style="padding: 4px;">Collating General</td>${state.qtys.map(q => {
-                    let totalSheets = q * leafCount;
-                    let cost = Math.max(50, (totalSheets / 1000) * 12);
-                    return `<td style="text-align: right;">$${fM(cost)}</td>`;
-                }).join('')}</tr>` : ''}
-                <tr style="font-weight: bold; color: #d9534f; border-top: 1px solid #ddd;"><td>Volume Discount</td>${state.qtys.map(q => {
-                    let d = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length-1];
-                    let baseUnitSum = items.filter(i => i.active).reduce((sum, curr) => sum + curr.unit, 0);
-                    let collCost = state.selectedExtras.some(e => e.name === "Collating General") ? Math.max(50, (q * leafCount / 1000) * 12) : 0;
-                    let totalBeforeDisc = (baseUnitSum * q) + collCost;
-                    return `<td style="text-align: right;">-${d.Rate}% (-$${fM(totalBeforeDisc * d.Rate/100)})</td>`;
-                }).join('')}</tr>
-                <tr style="font-weight: bold; font-size: 14px; background: #000; color: #fff; border-top: 2px solid #000;">
-                    <td style="padding: 10px;">TOTAL (INC GST)</td>${state.qtys.map(q => {
-                        let d = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length-1];
-                        let baseUnitSum = items.filter(i => i.active).reduce((sum, curr) => sum + curr.unit, 0);
-                        let collCost = state.selectedExtras.some(e => e.name === "Collating General") ? Math.max(50, (q * leafCount / 1000) * 12) : 0;
-                        let adjTotal = Math.max(50, ((baseUnitSum * q) + collCost) * (1 - d.Rate/100));
-                        return `<td style="text-align: right; padding: 10px;">$${fM(adjTotal * 1.1)}</td>`;
-                    }).join('')}
-                </tr></table></div>
-            <div style="background:#f4f4f4; border:1px solid #ccc; padding:15px; border-radius:8px;"><h4 style="margin:0 0 10px 0;">Technical Logic Box</h4><b>Leaves:</b> ${leafCount} x ${state.leafMM}mm (${state.leafGSMValue}gsm) | <b>Spine:</b> ${spineMetric.toFixed(2)}mm</div>
-            <button style="width:100%; padding:15px; background:#000; color:#fff; border:none; margin-top:15px; font-weight:bold; cursor:pointer; border-radius:4px;" onclick="location.reload()">START OVER</button>
-        </div>`;
-        document.getElementById('active-question-container').innerHTML = html;
-        document.getElementById('input-area').style.display = 'none';
-    }
-
-    window.tlStartQuoteApp = function() {
-        try {
-            const root = document.getElementById('quote-app-root');
-            if (!root) return false;
-            if (!root.querySelector('#button-space') || !root.querySelector('#active-question-container')) return false;
-            initDefaults();
-            renderEngine();
+        updateCoverUI();
+    } else if (current.type === "multiselect") {
+        bSpace.innerHTML = '';
+        bSpace.style.display = 'flex';
+        let list = db.extras.filter(e => {
+            if (e.exclude && e.exclude.some(cat => state.bindCategory.includes(cat))) return false;
+            if (e.only && !e.only.some(cat => state.bindCategory.includes(cat))) return false;
             return true;
-        } catch (err) {
-            const q = document.getElementById('active-question-container');
-            if (q) {
-                q.innerHTML = '<div style="color:#b00020;text-align:left;"><b>Quote app error:</b><br>' + String(err.message || err) + '</div>';
-            }
-            console.error('Twin Loop quote app error:', err);
-            return false;
-        }
-    };
-
-    function runVerificationTrigger() {
-        if (!window.tlStartQuoteApp()) {
-            setTimeout(runVerificationTrigger, 100);
-        }
+        });
+        list.push({ name: "Collating General" });
+        list.forEach(item => {
+            const isSel = state.selectedExtras.some(e => e.name === item.name);
+            const btn = createBtn(item.name, () => {
+                if (isSel) state.selectedExtras = state.selectedExtras.filter(e => e.name !== item.name);
+                else state.selectedExtras.push(item);
+                render();
+            });
+            if (isSel) { btn.style.background = "#000"; btn.style.color = "#fff"; }
+            bSpace.appendChild(btn);
+        });
+        bSpace.appendChild(createBtn("Finalize Quote \u2192", () => { state.history.push(state.step); state.step++; render(); }, "100%"));
+    } else if (current.type === "number") {
+        nSpace.style.display = 'flex';
+        document.getElementById('label-1').innerText = (current.id === "leafCount") ? "Sheets:" : "Value:";
+    } else if (current.type === "result") {
+        setTimeout(runCalculations, 50);
     }
+}
 
-    runVerificationTrigger();
-    setTimeout(function() {
-        const q = document.getElementById('active-question-container');
-        if (q && /^Loading/.test(q.textContent.trim())) {
-            window.tlStartQuoteApp();
+function getOptions(current) {
+    if (current.source === "bindCategory") return Object.keys(db['binding-costs']).map(k => ({ label: k, val: k }));
+    if (current.source === "bindSubtype") return Object.keys(db['binding-costs'][state.bindCategory]).map(k => ({ label: k, val: k }));
+    if (current.source === "leafSizes") {
+        if (state.bindCategory.includes('Prefect')) return ["A5", "B5", "A4"].map(s => ({ label: s, val: s }));
+        return Object.keys(db['binding-costs'][state.bindCategory][state.bindSubtype] || {}).map(s => ({ label: s, val: s }));
+    }
+    if (current.source === "gsm") return db.gsm.map(i => ({ label: i.GSM + 'gsm', val: i }));
+    if (current.source === "celloTypes") return [{ label: "No", val: { label: "No", cost: 0 } }, ...db['cello-glazing'].map(c => ({ label: c.label, val: c }))];
+    return (current.options) ? current.options.map(o => ({ label: o, val: o })) : [];
+}
+
+function createBtn(txt, fn, width = "auto") {
+    const b = document.createElement('button');
+    b.innerText = txt;
+    b.style.cssText = `padding: 10px; border: 1px solid #000; background: #fff; color: #000; cursor: pointer; border-radius: 4px; font-weight: bold; width: ${width}; margin-bottom: 4px;`;
+    b.onclick = fn;
+    return b;
+}
+
+function handleInput(val) {
+    state.history.push(state.step);
+    if (steps[state.step].id === "gsm") { state.leafGSMValue = parseFloat(val.GSM); state.leafMM = parseFloat(val.MM); }
+    else if (steps[state.step].id === "celloType") { state.celloType = val.label; state.celloCost = parseFloat(val.cost); }
+    else state[steps[state.step].id] = val;
+    state.step++;
+    render();
+}
+
+document.getElementById('submit-qtys').onclick = () => {
+    const val = document.getElementById('manual-qtys').value;
+    const qtys = val.split(/[\s,]+/).map(v => parseInt(v)).filter(v => v > 0).slice(0, 4);
+    if (qtys.length > 0) { state.qtys = qtys; state.history.push(state.step); state.step++; render(); }
+};
+
+document.getElementById('submit-number').onclick = () => {
+    const v = document.getElementById('manual-number').value;
+    if (v !== "") { handleInput(parseFloat(v)); document.getElementById('manual-number').value = ''; }
+};
+
+document.getElementById('submit-covers').onclick = () => {
+    const fK = document.getElementById('f-type').value, bK = document.getElementById('b-type').value;
+    state.frontCoverName = fK; state.backCoverName = bK;
+    state.frontCoverCost = (fK !== 'None') ? parseFloat(db.covers[fK][state.leafSize] || 0) : 0;
+    state.backCoverCost = (bK !== 'None') ? parseFloat(db.covers[bK][state.leafSize] || 0) : 0;
+    state.frontCoverMM = (fK !== 'None') ? parseFloat(db.covers[fK].mm) : 0;
+    state.backCoverMM = (bK !== 'None') ? parseFloat(db.covers[bK].mm) : 0;
+    state.frontSource = document.getElementById('f-source').value;
+    state.frontCollated = document.getElementById('f-collated').value;
+    state.backSource = document.getElementById('b-source').value;
+    state.backCollated = document.getElementById('b-collated').value;
+    state.history.push(state.step); state.step++; render();
+};
+
+document.getElementById('back-btn').onclick = () => {
+    if (state.history.length > 0) { state.step = state.history.pop(); render(); }
+};
+
+function runCalculations() {
+    const fM = (val) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+    const leafCount = parseFloat(state.leafCount || 0);
+    const spineMetric = (leafCount * state.leafMM) + state.frontCoverMM + state.backCoverMM;
+    const wireSize = (db.imperial.find(r => spineMetric <= r['Max']) || db.imperial[db.imperial.length - 1])['Wire'];
+
+    let bindUnit = 0;
+    if (state.bindCategory.includes('Prefect')) bindUnit = parseFloat(db['binding-costs'][state.bindCategory][state.bindSubtype][state.leafSize] || 0);
+    else if (state.bindCategory.includes('Case')) bindUnit = parseFloat(db['binding-costs'][state.bindCategory]['-'][state.leafSize] || 28.95);
+    else bindUnit = parseFloat(db['binding-costs'][state.bindCategory][state.bindSubtype][state.leafSize][wireSize] || 0);
+
+    let fSurcharge = (state.frontCoverName !== 'None' && state.frontSource === "Client Supplied" && state.frontCollated === "No") ? 0.10 : 0;
+    let bSurcharge = (state.backCoverName !== 'None' && state.backSource === "Client Supplied" && state.backCollated === "No") ? 0.10 : 0;
+    let tabUnit = parseFloat(state.qtyTabs || 0) * 0.15;
+    let sheetUnit = parseFloat(state.qtyExtraSheets || 0) * 0.15;
+    let punchUnit = (!state.bindCategory.includes('Case') && parseFloat(state.qtyTabs) > 0) ? (spineMetric <= 14 ? 0.10 : 0.20) : 0;
+
+    let items = [
+        { label: `Binding Base (${state.leafSize}${!state.bindCategory.includes('Prefect') && !state.bindCategory.includes('Case') ? ', ' + wireSize : ''})`, unit: bindUnit, active: true },
+        { label: `Front Cover: ${state.frontCoverName} (${state.frontSource})`, unit: (state.frontSource === "Twin Loop" ? state.frontCoverCost : 0) + fSurcharge, active: state.frontCoverName !== 'None' },
+        { label: `Back Cover: ${state.backCoverName} (${state.backSource})`, unit: (state.backSource === "Twin Loop" ? state.backCoverCost : 0) + bSurcharge, active: state.backCoverName !== 'None' },
+        { label: `Cello Glazing: ${state.celloType}`, unit: state.celloCost, active: state.celloCost > 0 },
+        { label: `Index Tabs (${state.qtyTabs} units)`, unit: tabUnit, active: tabUnit > 0 },
+        { label: `Extra Sheets (${state.qtyExtraSheets} units)`, unit: sheetUnit, active: sheetUnit > 0 },
+        { label: `Hand Punching Surcharge`, unit: punchUnit, active: punchUnit > 0 }
+    ];
+
+    state.selectedExtras.forEach(e => {
+        if (e.name !== "Collating General") {
+            let cost = db.extras.find(dbE => dbE.name === e.name)?.cost || 0;
+            if (cost) items.push({ label: e.name, unit: cost, active: true });
         }
-    }, 500);
-})();
+    });
+
+    const hasCollating = state.selectedExtras.some(e => e.name === "Collating General");
+    const activeItems = items.filter(i => i.active);
+
+    let html = `<div style="text-align:left; font-size: 11px;">
+        <div style="background:#000; color:#fff; padding:15px; border-radius:8px; margin-bottom:15px; text-align:center;">
+            <div style="font-size:10px; opacity:0.8;">ITEMIZED MULTI-QUANTITY QUOTE</div>
+            <div style="font-size:22px; font-weight:bold;">${state.bindCategory}</div>
+        </div>
+        <div style="overflow-x: auto;">
+        <table style="width:100%; border-collapse:collapse; margin-bottom: 20px;">
+            <tr style="background: #f2f2f2; font-weight: bold; border-bottom: 2px solid #000;">
+                <td style="padding: 8px;">Description</td>
+                ${state.qtys.map(q => `<td style="text-align: right; padding: 8px;">Qty ${q}</td>`).join('')}
+            </tr>
+            ${activeItems.map(i => `
+            <tr>
+                <td style="padding: 4px;">${i.label}</td>
+                ${state.qtys.map(q => `<td style="text-align: right;">$${fM(i.unit * q)}</td>`).join('')}
+            </tr>`).join('')}
+            ${hasCollating ? `<tr><td style="padding: 4px;">Collating General</td>${state.qtys.map(q => {
+                const cost = Math.max(50, (q * leafCount / 1000) * 12);
+                return `<td style="text-align: right;">$${fM(cost)}</td>`;
+            }).join('')}</tr>` : ''}
+            <tr style="font-weight: bold; color: #d9534f; border-top: 1px solid #ddd;">
+                <td>Volume Discount</td>
+                ${state.qtys.map(q => {
+                    const d = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length - 1];
+                    const base = activeItems.reduce((sum, curr) => sum + curr.unit, 0);
+                    const coll = hasCollating ? Math.max(50, (q * leafCount / 1000) * 12) : 0;
+                    const tot = (base * q) + coll;
+                    return `<td style="text-align: right;">-${d.Rate}% (-$${fM(tot * d.Rate / 100)})</td>`;
+                }).join('')}
+            </tr>
+            <tr style="font-weight: bold; font-size: 14px; background: #000; color: #fff; border-top: 2px solid #000;">
+                <td style="padding: 10px;">TOTAL (INC GST)</td>
+                ${state.qtys.map(q => {
+                    const d = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length - 1];
+                    const base = activeItems.reduce((sum, curr) => sum + curr.unit, 0);
+                    const coll = hasCollating ? Math.max(50, (q * leafCount / 1000) * 12) : 0;
+                    const adj = Math.max(50, ((base * q) + coll) * (1 - d.Rate / 100));
+                    return `<td style="text-align: right; padding: 10px;">$${fM(adj * 1.1)}</td>`;
+                }).join('')}
+            </tr>
+        </table>
+        </div>
+        <div style="background:#f4f4f4; border:1px solid #ccc; padding:15px; border-radius:8px;">
+            <h4 style="margin:0 0 10px 0;">Technical Logic Box</h4>
+            <b>Leaves:</b> ${leafCount} x ${state.leafMM}mm (${state.leafGSMValue}gsm) | <b>Spine:</b> ${spineMetric.toFixed(2)}mm | <b>Wire Size:</b> ${wireSize}
+        </div>
+        <button onclick="location.reload()" style="width:100%; padding:15px; background:#000; color:#fff; border:none; margin-top:15px; font-weight:bold; cursor:pointer; border-radius:4px;">START OVER</button>
+    </div>`;
+
+    document.getElementById('active-question-container').innerHTML = html;
+    document.getElementById('input-area').style.display = 'none';
+}
+
+initDefaults();
+render();
 </script>
+
+</body>
+</html>
