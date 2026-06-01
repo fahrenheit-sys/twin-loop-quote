@@ -4,12 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Twin Loop Quote Tool</title>
+<style>
+    @media print {
+        body * { visibility: hidden; }
+        #print-area, #print-area * { visibility: visible; }
+        #print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+        .no-print { display: none !important; }
+    }
+</style>
 </head>
 <body>
 
 <div id="quote-app-root" style="max-width: 850px; margin: 20px auto; border: 1px solid #ddd; border-radius: 12px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; background: #fff; color: #000; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
     <div style="background: #f8f9fa; padding: 15px; border-bottom: 1px solid #ddd; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
-        <span>Twin Loop Multi-Quantity Assistant</span>
+        <img src="https://www.twinloop.com.au/wp-content/uploads/2021/06/twinloop-header-logo-blueonwhite-@2x.png" style="height: 36px;" alt="Twin Loop">
         <button id="back-btn" style="display: none; background: #000; border: 1px solid #fff; color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">&larr; Back</button>
     </div>
 
@@ -19,6 +27,14 @@
 
     <div id="input-area" style="padding: 20px; border-top: 1px solid #eee; background: #fdfdfd; min-height: 150px;">
         <div id="button-space" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;"></div>
+
+        <div id="text-input-space" style="display: none; flex-direction: column; gap: 12px; max-width: 400px; margin: 0 auto;">
+            <input type="text" id="text-input-field" placeholder="" style="padding: 12px; border: 1px solid #000; border-radius: 4px; font-size: 16px;">
+            <div style="display: flex; gap: 8px;">
+                <button id="submit-text" style="flex: 1; padding: 12px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Continue &rarr;</button>
+                <button id="skip-text" style="padding: 12px 16px; background: #fff; color: #000; border: 1px solid #000; border-radius: 4px; cursor: pointer; font-size: 12px;">Skip</button>
+            </div>
+        </div>
 
         <div id="multi-qty-space" style="display: none; flex-direction: column; gap: 15px; max-width: 400px; margin: 0 auto;">
             <p style="font-size: 13px; color: #666; margin: 0;">Enter up to 4 quantities (separated by commas):</p>
@@ -145,6 +161,13 @@ const db = {
     ]
 };
 
+function generateQuoteNumber() {
+    const today = new Date().toISOString().slice(0, 10);
+    const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    const number = Math.floor(Math.random() * 900) + 100;
+    return today + '-' + letter + number;
+}
+
 let state = {};
 
 function initDefaults() {
@@ -153,23 +176,28 @@ function initDefaults() {
         frontCoverName: 'None', frontCoverMM: 0, frontCoverCost: 0, frontSource: 'Twin Loop', frontCollated: 'Yes',
         backCoverName: 'None', backCoverMM: 0, backCoverCost: 0, backSource: 'Twin Loop', backCollated: 'Yes',
         celloType: 'No', celloCost: 0, hasInserts: 'No', qtyTabs: 0, qtyExtraSheets: 0,
-        selectedExtras: [], bindCategory: '', bindSubtype: '', history: []
+        selectedExtras: [], bindCategory: '', bindSubtype: '', history: [],
+        customerName: '', customerCompany: '', customerEmail: '',
+        quoteNumber: generateQuoteNumber()
     };
 }
 
 const steps = [
-    { id: "bindCategory", q: "Select Category:", type: "button", source: "bindCategory" },
-    { id: "bindSubtype", q: "Select Style:", type: "button", source: "bindSubtype" },
-    { id: "qtys", q: "Quantities Required:", type: "multi-qty" },
-    { id: "leafSize", q: "Leaf Size:", type: "button", source: "leafSizes" },
-    { id: "leafCount", q: "Internal sheets per book?", type: "number" },
-    { id: "gsm", q: "Paper GSM:", type: "button", source: "gsm" },
+    { id: "customerName",    q: "Customer Name:",    type: "text-input", placeholder: "e.g. John Smith",      required: true  },
+    { id: "customerCompany", q: "Company Name:",     type: "text-input", placeholder: "e.g. Acme Corp",       required: false },
+    { id: "customerEmail",   q: "Customer Email:",   type: "text-input", placeholder: "e.g. john@acme.com",   required: true  },
+    { id: "bindCategory",  q: "Select Binding Category:", type: "button", source: "bindCategory" },
+    { id: "bindSubtype",   q: "Select Style:",             type: "button", source: "bindSubtype" },
+    { id: "qtys",          q: "Quantities Required:",      type: "multi-qty" },
+    { id: "leafSize",      q: "Leaf Size:",                type: "button", source: "leafSizes" },
+    { id: "leafCount",     q: "Internal sheets per book?", type: "number" },
+    { id: "gsm",           q: "Paper GSM:",                type: "button", source: "gsm" },
     { id: "coverDashboard", q: "Configure Covers:", type: "cover-dash", condition: () => !state.bindCategory.includes('Prefect') && !state.bindCategory.includes('Case') },
-    { id: "celloType", q: "Apply Single-Sided Glazing?", type: "button", source: "celloTypes", condition: () => state.bindCategory.includes('Prefect') },
-    { id: "hasInserts", q: "Add any Inserts?", type: "button", options: ["Yes", "No"], condition: () => !state.bindCategory.includes('Case') },
-    { id: "qtyTabs", q: "Number of Tabs?", type: "number", condition: () => state.hasInserts === "Yes" && !state.bindCategory.includes('Case') },
+    { id: "celloType",    q: "Apply Single-Sided Glazing?", type: "button", source: "celloTypes", condition: () => state.bindCategory.includes('Prefect') },
+    { id: "hasInserts",   q: "Add any Inserts?", type: "button", options: ["Yes", "No"], condition: () => !state.bindCategory.includes('Case') },
+    { id: "qtyTabs",      q: "Number of Tabs?",         type: "number", condition: () => state.hasInserts === "Yes" && !state.bindCategory.includes('Case') },
     { id: "qtyExtraSheets", q: "Number of Extra Sheets?", type: "number", condition: () => state.hasInserts === "Yes" && !state.bindCategory.includes('Case') },
-    { id: "extras", q: "Production Extras:", type: "multiselect" },
+    { id: "extras",    q: "Production Extras:", type: "multiselect" },
     { id: "calculate", q: "Processing Quote...", type: "result" }
 ];
 
@@ -184,6 +212,7 @@ function updateCoverUI() {
 function render() {
     if (state.step >= steps.length) return;
     const current = steps[state.step];
+
     if (current.id === "bindSubtype") {
         const styles = Object.keys(db['binding-costs'][state.bindCategory] || {});
         if (styles.length === 1 && styles[0] === "-") { state.bindSubtype = "-"; state.step++; return render(); }
@@ -195,10 +224,18 @@ function render() {
     const nSpace = document.getElementById('number-space');
     const mSpace = document.getElementById('multi-qty-space');
     const dSpace = document.getElementById('cover-dashboard');
-    [bSpace, nSpace, mSpace, dSpace].forEach(s => s.style.display = 'none');
+    const tSpace = document.getElementById('text-input-space');
+    [bSpace, nSpace, mSpace, dSpace, tSpace].forEach(s => s.style.display = 'none');
     document.getElementById('back-btn').style.display = (state.history.length > 0) ? 'block' : 'none';
 
-    if (current.type === "button") {
+    if (current.type === "text-input") {
+        tSpace.style.display = 'flex';
+        const field = document.getElementById('text-input-field');
+        field.value = state[current.id] || '';
+        field.placeholder = current.placeholder || '';
+        field.focus();
+        document.getElementById('skip-text').style.display = current.required ? 'none' : 'block';
+    } else if (current.type === "button") {
         bSpace.innerHTML = '';
         bSpace.style.display = 'flex';
         getOptions(current).forEach(opt => bSpace.appendChild(createBtn(opt.label, () => handleInput(opt.val))));
@@ -257,7 +294,7 @@ function getOptions(current) {
 function createBtn(txt, fn, width = "auto") {
     const b = document.createElement('button');
     b.innerText = txt;
-    b.style.cssText = `padding: 10px; border: 1px solid #000; background: #fff; color: #000; cursor: pointer; border-radius: 4px; font-weight: bold; width: ${width}; margin-bottom: 4px;`;
+    b.style.cssText = 'padding: 10px; border: 1px solid #000; background: #fff; color: #000; cursor: pointer; border-radius: 4px; font-weight: bold; width: ' + width + '; margin-bottom: 4px;';
     b.onclick = fn;
     return b;
 }
@@ -270,6 +307,27 @@ function handleInput(val) {
     state.step++;
     render();
 }
+
+function submitTextInput(skipValue) {
+    const current = steps[state.step];
+    const val = skipValue ? '' : document.getElementById('text-input-field').value.trim();
+    if (current.required && !val) {
+        document.getElementById('text-input-field').style.border = '2px solid red';
+        return;
+    }
+    document.getElementById('text-input-field').style.border = '1px solid #000';
+    state.history.push(state.step);
+    state[current.id] = val;
+    state.step++;
+    render();
+}
+
+document.getElementById('submit-text').onclick = () => submitTextInput(false);
+document.getElementById('skip-text').onclick  = () => submitTextInput(true);
+
+document.getElementById('text-input-field').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') submitTextInput(false);
+});
 
 document.getElementById('submit-qtys').onclick = () => {
     const val = document.getElementById('manual-qtys').value;
@@ -286,19 +344,23 @@ document.getElementById('submit-covers').onclick = () => {
     const fK = document.getElementById('f-type').value, bK = document.getElementById('b-type').value;
     state.frontCoverName = fK; state.backCoverName = bK;
     state.frontCoverCost = (fK !== 'None') ? parseFloat(db.covers[fK][state.leafSize] || 0) : 0;
-    state.backCoverCost = (bK !== 'None') ? parseFloat(db.covers[bK][state.leafSize] || 0) : 0;
-    state.frontCoverMM = (fK !== 'None') ? parseFloat(db.covers[fK].mm) : 0;
-    state.backCoverMM = (bK !== 'None') ? parseFloat(db.covers[bK].mm) : 0;
-    state.frontSource = document.getElementById('f-source').value;
-    state.frontCollated = document.getElementById('f-collated').value;
-    state.backSource = document.getElementById('b-source').value;
-    state.backCollated = document.getElementById('b-collated').value;
+    state.backCoverCost  = (bK !== 'None') ? parseFloat(db.covers[bK][state.leafSize] || 0) : 0;
+    state.frontCoverMM   = (fK !== 'None') ? parseFloat(db.covers[fK].mm) : 0;
+    state.backCoverMM    = (bK !== 'None') ? parseFloat(db.covers[bK].mm) : 0;
+    state.frontSource    = document.getElementById('f-source').value;
+    state.frontCollated  = document.getElementById('f-collated').value;
+    state.backSource     = document.getElementById('b-source').value;
+    state.backCollated   = document.getElementById('b-collated').value;
     state.history.push(state.step); state.step++; render();
 };
 
 document.getElementById('back-btn').onclick = () => {
     if (state.history.length > 0) { state.step = state.history.pop(); render(); }
 };
+
+function formatDate(date) {
+    return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+}
 
 function runCalculations() {
     const fM = (val) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
@@ -313,18 +375,18 @@ function runCalculations() {
 
     let fSurcharge = (state.frontCoverName !== 'None' && state.frontSource === "Client Supplied" && state.frontCollated === "No") ? 0.10 : 0;
     let bSurcharge = (state.backCoverName !== 'None' && state.backSource === "Client Supplied" && state.backCollated === "No") ? 0.10 : 0;
-    let tabUnit = parseFloat(state.qtyTabs || 0) * 0.15;
-    let sheetUnit = parseFloat(state.qtyExtraSheets || 0) * 0.15;
-    let punchUnit = (!state.bindCategory.includes('Case') && parseFloat(state.qtyTabs) > 0) ? (spineMetric <= 14 ? 0.10 : 0.20) : 0;
+    let tabUnit    = parseFloat(state.qtyTabs || 0) * 0.15;
+    let sheetUnit  = parseFloat(state.qtyExtraSheets || 0) * 0.15;
+    let punchUnit  = (!state.bindCategory.includes('Case') && parseFloat(state.qtyTabs) > 0) ? (spineMetric <= 14 ? 0.10 : 0.20) : 0;
 
     let items = [
-        { label: `Binding Base (${state.leafSize}${!state.bindCategory.includes('Prefect') && !state.bindCategory.includes('Case') ? ', ' + wireSize : ''})`, unit: bindUnit, active: true },
-        { label: `Front Cover: ${state.frontCoverName} (${state.frontSource})`, unit: (state.frontSource === "Twin Loop" ? state.frontCoverCost : 0) + fSurcharge, active: state.frontCoverName !== 'None' },
-        { label: `Back Cover: ${state.backCoverName} (${state.backSource})`, unit: (state.backSource === "Twin Loop" ? state.backCoverCost : 0) + bSurcharge, active: state.backCoverName !== 'None' },
-        { label: `Cello Glazing: ${state.celloType}`, unit: state.celloCost, active: state.celloCost > 0 },
-        { label: `Index Tabs (${state.qtyTabs} units)`, unit: tabUnit, active: tabUnit > 0 },
-        { label: `Extra Sheets (${state.qtyExtraSheets} units)`, unit: sheetUnit, active: sheetUnit > 0 },
-        { label: `Hand Punching Surcharge`, unit: punchUnit, active: punchUnit > 0 }
+        { label: 'Binding Base (' + state.leafSize + (!state.bindCategory.includes('Prefect') && !state.bindCategory.includes('Case') ? ', ' + wireSize : '') + ')', unit: bindUnit, active: true },
+        { label: 'Front Cover: ' + state.frontCoverName + ' (' + state.frontSource + ')', unit: (state.frontSource === "Twin Loop" ? state.frontCoverCost : 0) + fSurcharge, active: state.frontCoverName !== 'None' },
+        { label: 'Back Cover: ' + state.backCoverName + ' (' + state.backSource + ')', unit: (state.backSource === "Twin Loop" ? state.backCoverCost : 0) + bSurcharge, active: state.backCoverName !== 'None' },
+        { label: 'Cello Glazing: ' + state.celloType, unit: state.celloCost, active: state.celloCost > 0 },
+        { label: 'Index Tabs (' + state.qtyTabs + ' units)', unit: tabUnit, active: tabUnit > 0 },
+        { label: 'Extra Sheets (' + state.qtyExtraSheets + ' units)', unit: sheetUnit, active: sheetUnit > 0 },
+        { label: 'Hand Punching Surcharge', unit: punchUnit, active: punchUnit > 0 }
     ];
 
     state.selectedExtras.forEach(e => {
@@ -335,55 +397,128 @@ function runCalculations() {
     });
 
     const hasCollating = state.selectedExtras.some(e => e.name === "Collating General");
-    const activeItems = items.filter(i => i.active);
+    const activeItems  = items.filter(i => i.active);
 
-    let html = `<div style="text-align:left; font-size: 11px;">
-        <div style="background:#000; color:#fff; padding:15px; border-radius:8px; margin-bottom:15px; text-align:center;">
-            <div style="font-size:10px; opacity:0.8;">ITEMIZED MULTI-QUANTITY QUOTE</div>
-            <div style="font-size:22px; font-weight:bold;">${state.bindCategory}</div>
+    const today = new Date();
+    const validUntil = new Date();
+    validUntil.setDate(today.getDate() + 30);
+
+    // Build plain-text email body for mailto
+    let emailLines = [
+        'Dear ' + (state.customerName || 'Customer') + ',',
+        '',
+        'Please find your quote details below.',
+        '',
+        'Quote Number: ' + state.quoteNumber,
+        'Date: ' + formatDate(today),
+        'Valid Until: ' + formatDate(validUntil),
+        '',
+        'Binding Type: ' + state.bindCategory,
+        'Leaf Size: ' + state.leafSize,
+        'Quantities: ' + state.qtys.join(', '),
+        '',
+        '--- PRICING ---',
+    ];
+    state.qtys.forEach(q => {
+        const d = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length - 1];
+        const base = activeItems.reduce((sum, curr) => sum + curr.unit, 0);
+        const coll = hasCollating ? Math.max(50, (q * leafCount / 1000) * 12) : 0;
+        const adj  = Math.max(50, ((base * q) + coll) * (1 - d.Rate / 100));
+        emailLines.push('Qty ' + q + ': $' + fM(adj * 1.1) + ' inc GST');
+    });
+    emailLines.push('', 'Prices include GST. Volume discounts applied.');
+    emailLines.push('', 'Thank you for your enquiry.', 'Twin Loop Binding');
+
+    const mailtoHref = 'mailto:' + (state.customerEmail || '') +
+        '?subject=' + encodeURIComponent('Quote ' + state.quoteNumber + ' — Twin Loop Binding') +
+        '&body=' + encodeURIComponent(emailLines.join('\n'));
+
+    const html = `
+    <div id="print-area" style="text-align:left; font-size: 11px;">
+
+        <!-- Quote Header -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; padding-bottom:15px; border-bottom:2px solid #000;">
+            <img src="https://www.twinloop.com.au/wp-content/uploads/2021/06/twinloop-header-logo-blueonwhite-@2x.png" style="height:45px;" alt="Twin Loop">
+            <div style="text-align:right; line-height:1.6;">
+                <div style="font-size:20px; font-weight:bold; letter-spacing:2px;">QUOTE</div>
+                <div><b>Quote #:</b> ${state.quoteNumber}</div>
+                <div><b>Date:</b> ${formatDate(today)}</div>
+                <div><b>Valid Until:</b> ${formatDate(validUntil)}</div>
+            </div>
         </div>
+
+        <!-- Customer Info -->
+        <div style="margin-bottom:20px; padding:12px; background:#f8f9fa; border-radius:6px; line-height:1.8;">
+            <b>Prepared for:</b><br>
+            ${state.customerName ? state.customerName + '<br>' : ''}
+            ${state.customerCompany ? state.customerCompany + '<br>' : ''}
+            ${state.customerEmail ? '<a href="mailto:' + state.customerEmail + '" style="color:#000;">' + state.customerEmail + '</a>' : ''}
+        </div>
+
+        <!-- Quote Table -->
         <div style="overflow-x: auto;">
-        <table style="width:100%; border-collapse:collapse; margin-bottom: 20px;">
-            <tr style="background: #f2f2f2; font-weight: bold; border-bottom: 2px solid #000;">
-                <td style="padding: 8px;">Description</td>
-                ${state.qtys.map(q => `<td style="text-align: right; padding: 8px;">Qty ${q}</td>`).join('')}
+        <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+            <tr style="background:#f2f2f2; font-weight:bold; border-bottom:2px solid #000;">
+                <td style="padding:8px;">Description</td>
+                ${state.qtys.map(q => `<td style="text-align:right; padding:8px;">Qty ${q}</td>`).join('')}
             </tr>
             ${activeItems.map(i => `
-            <tr>
-                <td style="padding: 4px;">${i.label}</td>
-                ${state.qtys.map(q => `<td style="text-align: right;">$${fM(i.unit * q)}</td>`).join('')}
+            <tr style="border-bottom:1px solid #f0f0f0;">
+                <td style="padding:6px 8px;">${i.label}</td>
+                ${state.qtys.map(q => `<td style="text-align:right; padding:6px 8px;">$${fM(i.unit * q)}</td>`).join('')}
             </tr>`).join('')}
-            ${hasCollating ? `<tr><td style="padding: 4px;">Collating General</td>${state.qtys.map(q => {
-                const cost = Math.max(50, (q * leafCount / 1000) * 12);
-                return `<td style="text-align: right;">$${fM(cost)}</td>`;
-            }).join('')}</tr>` : ''}
-            <tr style="font-weight: bold; color: #d9534f; border-top: 1px solid #ddd;">
-                <td>Volume Discount</td>
+            ${hasCollating ? `
+            <tr style="border-bottom:1px solid #f0f0f0;">
+                <td style="padding:6px 8px;">Collating General</td>
+                ${state.qtys.map(q => {
+                    const cost = Math.max(50, (q * leafCount / 1000) * 12);
+                    return `<td style="text-align:right; padding:6px 8px;">$${fM(cost)}</td>`;
+                }).join('')}
+            </tr>` : ''}
+            <tr style="font-weight:bold; color:#c0392b; border-top:1px solid #ddd;">
+                <td style="padding:6px 8px;">Volume Discount</td>
                 ${state.qtys.map(q => {
                     const d = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length - 1];
                     const base = activeItems.reduce((sum, curr) => sum + curr.unit, 0);
                     const coll = hasCollating ? Math.max(50, (q * leafCount / 1000) * 12) : 0;
-                    const tot = (base * q) + coll;
-                    return `<td style="text-align: right;">-${d.Rate}% (-$${fM(tot * d.Rate / 100)})</td>`;
+                    const tot  = (base * q) + coll;
+                    return `<td style="text-align:right; padding:6px 8px;">-${d.Rate}% (-$${fM(tot * d.Rate / 100)})</td>`;
                 }).join('')}
             </tr>
-            <tr style="font-weight: bold; font-size: 14px; background: #000; color: #fff; border-top: 2px solid #000;">
-                <td style="padding: 10px;">TOTAL (INC GST)</td>
+            <tr style="font-weight:bold; font-size:14px; background:#000; color:#fff; border-top:2px solid #000;">
+                <td style="padding:12px;">TOTAL (INC GST)</td>
                 ${state.qtys.map(q => {
                     const d = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length - 1];
                     const base = activeItems.reduce((sum, curr) => sum + curr.unit, 0);
                     const coll = hasCollating ? Math.max(50, (q * leafCount / 1000) * 12) : 0;
-                    const adj = Math.max(50, ((base * q) + coll) * (1 - d.Rate / 100));
-                    return `<td style="text-align: right; padding: 10px;">$${fM(adj * 1.1)}</td>`;
+                    const adj  = Math.max(50, ((base * q) + coll) * (1 - d.Rate / 100));
+                    return `<td style="text-align:right; padding:12px; font-size:15px;">$${fM(adj * 1.1)}</td>`;
                 }).join('')}
             </tr>
         </table>
         </div>
-        <div style="background:#f4f4f4; border:1px solid #ccc; padding:15px; border-radius:8px;">
-            <h4 style="margin:0 0 10px 0;">Technical Logic Box</h4>
-            <b>Leaves:</b> ${leafCount} x ${state.leafMM}mm (${state.leafGSMValue}gsm) | <b>Spine:</b> ${spineMetric.toFixed(2)}mm | <b>Wire Size:</b> ${wireSize}
+
+        <!-- Technical Box -->
+        <div style="background:#f4f4f4; border:1px solid #ccc; padding:12px; border-radius:6px; margin-bottom:20px;">
+            <b>Technical Details:</b> &nbsp;
+            Leaves: ${leafCount} x ${state.leafMM}mm (${state.leafGSMValue}gsm) &nbsp;|&nbsp;
+            Spine: ${spineMetric.toFixed(2)}mm &nbsp;|&nbsp;
+            Wire Size: ${wireSize}
         </div>
-        <button onclick="location.reload()" style="width:100%; padding:15px; background:#000; color:#fff; border:none; margin-top:15px; font-weight:bold; cursor:pointer; border-radius:4px;">START OVER</button>
+
+        <!-- Action Buttons -->
+        <div class="no-print" style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a href="${mailtoHref}" style="flex:1; min-width:140px; padding:14px; background:#000; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold; text-align:center; text-decoration:none; font-size:13px;">
+                &#9993; Email Quote
+            </a>
+            <button onclick="window.print()" style="flex:1; min-width:140px; padding:14px; background:#fff; color:#000; border:2px solid #000; border-radius:4px; cursor:pointer; font-weight:bold; font-size:13px;">
+                &#128438; Download PDF
+            </button>
+            <button onclick="location.reload()" style="flex:1; min-width:140px; padding:14px; background:#fff; color:#000; border:2px solid #000; border-radius:4px; cursor:pointer; font-weight:bold; font-size:13px;">
+                &#8635; Start Over
+            </button>
+        </div>
+
     </div>`;
 
     document.getElementById('active-question-container').innerHTML = html;
