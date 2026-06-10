@@ -98,7 +98,7 @@ function buildEmailHtml(state, computed) {
   const valid = new Date(); valid.setDate(today.getDate() + 30);
   const fDate = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  const { items, totals, hasCollating, collRate, collMin, celloSetupFee, bindSetups = [] } = computed;
+  const { items, totals, collatingLines = [], celloSetupFee, bindSetups = [] } = computed;
   const leafCount = parseFloat(state.leafCount || 0);
 
   const qtyHeaders = state.qtys.map(q =>
@@ -111,14 +111,11 @@ function buildEmailHtml(state, computed) {
       ${state.qtys.map(q => `<td style="text-align:right;padding:6px 14px;border-bottom:1px solid #f0f0f0;">$${fmt(i.unit * q)}</td>`).join('')}
     </tr>`).join('');
 
-  const collRow = hasCollating ? `
+  const collRow = collatingLines.map(l => `
     <tr>
-      <td style="padding:6px 14px;border-bottom:1px solid #f0f0f0;">Collating</td>
-      ${state.qtys.map(q => {
-        const cost = Math.max(collMin, (q * leafCount / 1000) * collRate);
-        return `<td style="text-align:right;padding:6px 14px;border-bottom:1px solid #f0f0f0;">$${fmt(cost)}</td>`;
-      }).join('')}
-    </tr>` : '';
+      <td style="padding:6px 14px;border-bottom:1px solid #f0f0f0;">${l.label}</td>
+      ${l.costs.map(c => `<td style="text-align:right;padding:6px 14px;border-bottom:1px solid #f0f0f0;">$${fmt(c)}</td>`).join('')}
+    </tr>`).join('');
 
   const setupRow = celloSetupFee > 0 ? `
     <tr>

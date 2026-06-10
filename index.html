@@ -125,7 +125,7 @@ function initDefaults() {
     frontCoverName: 'None', frontCoverMM: 0, frontCoverCost: 0, frontSource: 'Twin Loop', frontCollated: 'Yes',
     backCoverName:  'None', backCoverMM:  0, backCoverCost:  0, backSource:  'Twin Loop', backCollated:  'Yes',
     celloType: 'No', celloCost: 0, celloSetup: 0,
-    hasInserts: 'No', qtyTabs: 0, qtyExtraSheets: 0,
+    collating: {},
     selectedExtras: [], bindCategory: '', bindSubtype: '', history: [],
     customerName: '', customerCompany: '', customerEmail: '', customerReference: '',
     quoteNumber: generateQuoteNumber()
@@ -143,7 +143,6 @@ const steps = [
   { id: 'gsm',             q: 'What paper weight (GSM)?',                 type: 'button',    source: 'gsm' },
   { id: 'coverDashboard',  q: 'Select your covers:',                      type: 'cover-dash', condition: () => !isPerfect() && !isCase() },
   { id: 'celloType',       q: 'Apply glazing or lamination to covers?',   type: 'button',    source: 'celloTypes', condition: () => isPerfect() },
-  { id: 'hasInserts',      q: 'Do you need any inserts?',                 type: 'button',    options: ['Yes', 'No'], condition: () => !isPerfect() && !isCase() },
   { id: 'extras',          q: 'Any production extras? (select all that apply)', type: 'multiselect' },
   { id: 'customerReference', q: 'Estimate Request Number (optional):', type: 'text-input', placeholder: 'e.g. 12345', required: false },
   { id: 'customerName',    q: "Almost done! What's your name?",           type: 'text-input', placeholder: 'e.g. John Smith',     required: true  },
@@ -158,7 +157,6 @@ function isCase()    { return state.bindCategory === 'Case Binding';    }
 // ── Contact popup (non-standard items are quoted manually) ─────────────────────
 const CONTACT_EMAIL = 'quotes@twinloop.com.au';
 const CASE_EXTRA_MSG = `Contact Twin Loop on <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> and provide details such as the size of foiling or debossing required.`;
-const INSERTS_MSG    = `Inserts are non-standard. Contact Twin Loop on <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> and provide details of the inserts required.`;
 function showContactPopup(msg) {
   document.getElementById('contact-modal-msg').innerHTML = msg;
   document.getElementById('contact-modal').style.display = 'flex';
@@ -269,6 +267,42 @@ function render() {
       if (isSel) { btn.style.background = '#000'; btn.style.color = '#fff'; }
       bSpace.appendChild(btn);
     });
+
+    // Collating sub-options (inserts are a subset of collating).
+    const collOn = state.selectedExtras.some(e => e.name === 'Collating');
+    if (collOn) {
+      const panel = document.createElement('div');
+      panel.style.cssText = 'flex-basis:100%;width:100%;margin-top:8px;padding:14px;border:1px dashed #999;border-radius:8px;display:flex;flex-direction:column;gap:8px;text-align:left;';
+      const h = document.createElement('div');
+      h.innerText = 'Collating options (select all that apply):';
+      h.style.cssText = 'font-weight:bold;font-size:13px;margin-bottom:2px;';
+      panel.appendChild(h);
+      (db['collating-options'] || []).forEach(opt => {
+        const cur = state.collating[opt.key];
+        const on  = opt.needsQty ? (parseFloat(cur || 0) > 0) : !!cur;
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;';
+        const tbtn = createBtn((on ? '☑ ' : '☐ ') + opt.label, () => {
+          if (opt.needsQty) state.collating[opt.key] = on ? 0 : (parseFloat(cur) || 1);
+          else              state.collating[opt.key] = !on;
+          render();
+        });
+        tbtn.style.flex = '1'; tbtn.style.textAlign = 'left';
+        if (on) { tbtn.style.background = '#000'; tbtn.style.color = '#fff'; }
+        row.appendChild(tbtn);
+        if (opt.needsQty && on) {
+          const qin = document.createElement('input');
+          qin.type = 'number'; qin.min = '1'; qin.value = parseFloat(cur) || 1;
+          qin.style.cssText = 'width:80px;padding:8px;border:1px solid #000;border-radius:4px;font-family:inherit;';
+          qin.onchange = () => { state.collating[opt.key] = parseFloat(qin.value) || 0; };
+          const lbl = document.createElement('span'); lbl.innerText = 'per book'; lbl.style.fontSize = '11px';
+          row.appendChild(qin); row.appendChild(lbl);
+        }
+        panel.appendChild(row);
+      });
+      bSpace.appendChild(panel);
+    }
+
     bSpace.appendChild(createBtn('Continue →', () => { state.history.push(state.step); state.step++; render(); }, '200px'));
 
   } else if (current.type === 'number') {
@@ -326,10 +360,6 @@ function handleInput(val) {
     state.celloType  = val.label;
     state.celloCost  = parseFloat(val.cost  || 0);
     state.celloSetup = parseFloat(val.setup || 0);
-  } else if (id === 'hasInserts') {
-    // Inserts are non-standard — quoted manually. Show contact popup and don't price them.
-    if (val === 'Yes') { showContactPopup(INSERTS_MSG); state.hasInserts = 'No'; }
-    else state.hasInserts = val;
   } else {
     state[id] = val;
   }
@@ -439,17 +469,33 @@ function runCalculations() {
   });
 
   const activeItems   = items.filter(i => i.active);
-  const hasCollating  = state.selectedExtras.some(e => e.name === 'Collating');
-  const collRate      = db.collating?.rate || 10;
-  const collMin       = db.collating?.min  || 50;
   const celloSetupFee = state.celloSetup   || 0;
   const bindSetups    = state.qtys.map(q => bindSetupFee(q));
+
+  // Collating lines — one per selected collating option, each with a per-qty cost array.
+  const collatingOn   = state.selectedExtras.some(e => e.name === 'Collating');
+  const collatingLines = [];
+  if (collatingOn) {
+    (db['collating-options'] || []).forEach(opt => {
+      const sel    = state.collating[opt.key];
+      const qty    = opt.needsQty ? parseFloat(sel || 0) : 0;
+      const active = opt.needsQty ? qty > 0 : !!sel;
+      if (!active) return;
+      const costs = state.qtys.map(q => {
+        if (opt.unit === 'per_1000_sheets')   return Math.max(opt.min || 0, (q * leafCount / 1000) * opt.cost);
+        if (opt.unit === 'per_book')          return opt.cost * q;
+        if (opt.unit === 'per_unit_per_book') return opt.cost * qty * q;
+        return 0;
+      });
+      collatingLines.push({ label: opt.needsQty ? `${opt.label} (${qty}/book)` : opt.label, costs });
+    });
+  }
 
   // Per-qty totals
   const totals = state.qtys.map((q, idx) => {
     const disc        = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length - 1];
     const perUnitSum  = activeItems.reduce((s, i) => s + i.unit, 0);
-    const collCost    = hasCollating ? Math.max(collMin, (q * leafCount / 1000) * collRate) : 0;
+    const collCost    = collatingLines.reduce((s, l) => s + l.costs[idx], 0);
     const subtotal    = (perUnitSum * q) + collCost + celloSetupFee + bindSetups[idx];
     const discRate    = disc.Rate;
     const discAmt     = subtotal * (discRate / 100);
@@ -459,7 +505,7 @@ function runCalculations() {
   });
 
   // Stash for sendQuote()
-  window._quoteComputed = { spineMM, wireSize: showWire ? wireSize : null, items: activeItems, totals, hasCollating, collRate, collMin, celloSetupFee, bindSetups };
+  window._quoteComputed = { spineMM, wireSize: showWire ? wireSize : null, items: activeItems, totals, collatingLines, celloSetupFee, bindSetups };
 
   const today = new Date();
   const valid = new Date(); valid.setDate(today.getDate() + 30);
@@ -483,11 +529,11 @@ function runCalculations() {
       ${state.qtys.map(q => `<td style="text-align:right;padding:6px 8px;">$${fmt(i.unit * q)}</td>`).join('')}
     </tr>`).join('');
 
-  const collRow = hasCollating ? `
+  const collRow = collatingLines.map(l => `
     <tr style="border-bottom:1px solid #f0f0f0;">
-      <td style="padding:6px 8px;">Collating</td>
-      ${state.qtys.map(q => `<td style="text-align:right;padding:6px 8px;">$${fmt(Math.max(collMin, (q * leafCount / 1000) * collRate))}</td>`).join('')}
-    </tr>` : '';
+      <td style="padding:6px 8px;">${l.label}</td>
+      ${l.costs.map(c => `<td style="text-align:right;padding:6px 8px;">$${fmt(c)}</td>`).join('')}
+    </tr>`).join('');
 
   const setupRow = celloSetupFee > 0 ? `
     <tr style="border-bottom:1px solid #f0f0f0;">
@@ -622,9 +668,10 @@ async function loadPricing() {
   });
 
   try {
-    const [gsmRows, impRows, discRows, celloRows, coverRows, extraRows, bindRows, collRows] = await Promise.all([
+    const [gsmRows, impRows, discRows, celloRows, coverRows, extraRows, bindRows, collRows, collCoverRows, insertRows] = await Promise.all([
       get('gsm'), get('imperial'), get('volume_discount'), get('cello_glazing'),
-      get('covers'), get('extras'), get('binding_costs'), get('collating_general')
+      get('covers'), get('extras'), get('binding_costs'), get('collating_general'),
+      get('collating_covers'), get('inserts')
     ]);
 
     // GSM
@@ -663,10 +710,23 @@ async function loadPricing() {
       only:    r.only_bindings    || []
     }));
 
-    // Collating rate
+    // Collating general rate (text collating)
     db.collating = collRows[0]
       ? { rate: parseFloat(collRows[0].rate_per_1000), min: parseFloat(collRows[0].min_charge) }
       : { rate: 10, min: 50 };
+
+    // Collating options — built from existing tables: collating_covers (per book),
+    // collating_general (text, per 1,000 sheets), inserts (tabs/sheets, per unit per book).
+    const coverRate = type => parseFloat((collCoverRows.find(r => r.type === type) || {}).rate || 0);
+    const insertCost = type => parseFloat((insertRows.find(r => r.type === type) || {}).cost || 0);
+    db['collating-options'] = [
+      { key: 'front_covers',          label: 'Collate front covers',        unit: 'per_book',          cost: coverRate('Front Cover'),    min: 0,            needsQty: false },
+      { key: 'back_covers',           label: 'Collate back covers',         unit: 'per_book',          cost: coverRate('Back Cover'),     min: 0,            needsQty: false },
+      { key: 'front_and_back_covers', label: 'Collate front & back covers', unit: 'per_book',          cost: coverRate('Front and Back'), min: 0,            needsQty: false },
+      { key: 'text',                  label: 'Collate text',                unit: 'per_1000_sheets',   cost: db.collating.rate,           min: db.collating.min, needsQty: false },
+      { key: 'tabs',                  label: 'Insert tabs',                 unit: 'per_unit_per_book', cost: insertCost('Per Tab'),       min: 0,            needsQty: true  },
+      { key: 'sheets',                label: 'Insert sheets',               unit: 'per_unit_per_book', cost: insertCost('Per Sheet'),     min: 0,            needsQty: true  }
+    ];
 
     // Binding costs — nested: category > subtype > leaf_size [> wire_size] = cost
     db['binding-costs'] = {};
