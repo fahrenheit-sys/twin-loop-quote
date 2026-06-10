@@ -98,6 +98,13 @@
   </div>
 </div>
 
+<div id="contact-modal" class="no-print" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#fff;max-width:440px;width:100%;border-radius:12px;padding:28px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.3);font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+    <div id="contact-modal-msg" style="font-size:15px;line-height:1.6;color:#000;margin-bottom:22px;"></div>
+    <button id="contact-modal-ok" style="padding:10px 26px;background:#000;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-family:inherit;">Got it</button>
+  </div>
+</div>
+
 <script>
 const SB_URL  = 'https://bqfoguehtdkzvmwloehh.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxZm9ndWVodGRrenZtd2xvZWhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMDM3NDMsImV4cCI6MjA5NTg3OTc0M30.G-XeeOmZAREGBvDPqlWz17xxRQIgn7JsQVGNMCX9QNk';
@@ -137,10 +144,8 @@ const steps = [
   { id: 'coverDashboard',  q: 'Select your covers:',                      type: 'cover-dash', condition: () => !isPerfect() && !isCase() },
   { id: 'celloType',       q: 'Apply glazing or lamination to covers?',   type: 'button',    source: 'celloTypes', condition: () => isPerfect() },
   { id: 'hasInserts',      q: 'Do you need any inserts?',                 type: 'button',    options: ['Yes', 'No'], condition: () => !isPerfect() && !isCase() },
-  { id: 'qtyTabs',         q: 'How many index tabs?',                     type: 'number',    condition: () => state.hasInserts === 'Yes' && !isPerfect() && !isCase() },
-  { id: 'qtyExtraSheets',  q: 'How many extra sheets?',                   type: 'number',    condition: () => state.hasInserts === 'Yes' && !isPerfect() && !isCase() },
   { id: 'extras',          q: 'Any production extras? (select all that apply)', type: 'multiselect' },
-  { id: 'customerReference', q: 'Your quote reference or PO number (optional):', type: 'text-input', placeholder: 'e.g. PO-12345', required: false },
+  { id: 'customerReference', q: 'Estimate Request Number (optional):', type: 'text-input', placeholder: 'e.g. 12345', required: false },
   { id: 'customerName',    q: "Almost done! What's your name?",           type: 'text-input', placeholder: 'e.g. John Smith',     required: true  },
   { id: 'customerCompany', q: 'Company name (optional):',                 type: 'text-input', placeholder: 'e.g. Acme Corp',      required: false },
   { id: 'customerEmail',   q: 'Your email address (to receive the quote):', type: 'text-input', placeholder: 'e.g. john@acme.com', required: true  },
@@ -149,6 +154,15 @@ const steps = [
 
 function isPerfect() { return state.bindCategory === 'Prefect Binding'; }
 function isCase()    { return state.bindCategory === 'Case Binding';    }
+
+// ── Contact popup (non-standard items are quoted manually) ─────────────────────
+const CONTACT_EMAIL = 'quotes@twinloop.com.au';
+const CASE_EXTRA_MSG = `Contact Twin Loop on <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> and provide details such as the size of foiling or debossing required.`;
+const INSERTS_MSG    = `Inserts are non-standard. Contact Twin Loop on <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> and provide details of the inserts required.`;
+function showContactPopup(msg) {
+  document.getElementById('contact-modal-msg').innerHTML = msg;
+  document.getElementById('contact-modal').style.display = 'flex';
+}
 
 // Binding setup fee (per quantity). EVA: flat $35. PUR: tiered by book qty. Case: flat $50.
 function bindSetupFee(q) {
@@ -164,6 +178,7 @@ function bindSetupFee(q) {
     return 0;
   }
   if (isCase()) return 50;
+  if (state.bindCategory === 'Plastic Spiral') return 35;
   return 0;
 }
 
@@ -244,7 +259,11 @@ function render() {
       const isSel = state.selectedExtras.some(e => e.name === item.name);
       const btn = createBtn(item.name, () => {
         if (isSel) state.selectedExtras = state.selectedExtras.filter(e => e.name !== item.name);
-        else state.selectedExtras.push(item);
+        else {
+          state.selectedExtras.push(item);
+          // Case binding extras (foiling, debossing, ribbons) are non-standard — quoted manually.
+          if (isCase() && item.name !== 'Collating') showContactPopup(CASE_EXTRA_MSG);
+        }
         render();
       });
       if (isSel) { btn.style.background = '#000'; btn.style.color = '#fff'; }
@@ -277,9 +296,11 @@ function getOptions(current) {
     return db.gsm.map(i => ({ label: i.GSM + ' gsm', val: i }));
   }
   if (current.source === 'celloTypes') {
+    // Perfect binding: double-sided gloss/matt/soft touch is not offered.
+    const glazing = (db['cello-glazing'] || []).filter(c => !(isPerfect() && /double sided/i.test(c.label)));
     return [
       { label: 'No Glazing', val: { label: 'No', cost: 0, setup: 0 } },
-      ...(db['cello-glazing'] || []).map(c => ({ label: c.label, val: c }))
+      ...glazing.map(c => ({ label: c.label, val: c }))
     ];
   }
   return (current.options || []).map(o => ({ label: o, val: o }));
@@ -305,6 +326,10 @@ function handleInput(val) {
     state.celloType  = val.label;
     state.celloCost  = parseFloat(val.cost  || 0);
     state.celloSetup = parseFloat(val.setup || 0);
+  } else if (id === 'hasInserts') {
+    // Inserts are non-standard — quoted manually. Show contact popup and don't price them.
+    if (val === 'Yes') { showContactPopup(INSERTS_MSG); state.hasInserts = 'No'; }
+    else state.hasInserts = val;
   } else {
     state[id] = val;
   }
@@ -326,6 +351,7 @@ function submitTextInput(skip) {
   render();
 }
 
+document.getElementById('contact-modal-ok').onclick = () => { document.getElementById('contact-modal').style.display = 'none'; };
 document.getElementById('submit-text').onclick  = () => submitTextInput(false);
 document.getElementById('skip-text').onclick    = () => submitTextInput(true);
 document.getElementById('text-input-field').addEventListener('keydown', e => { if (e.key === 'Enter') submitTextInput(false); });
@@ -388,9 +414,6 @@ function runCalculations() {
   // Surcharges
   const fSurcharge = (state.frontCoverName !== 'None' && state.frontSource === 'Client Supplied' && state.frontCollated === 'No') ? 0.10 : 0;
   const bSurcharge = (state.backCoverName  !== 'None' && state.backSource  === 'Client Supplied' && state.backCollated  === 'No') ? 0.10 : 0;
-  const tabUnit    = parseFloat(state.qtyTabs        || 0) * 0.15;
-  const sheetUnit  = parseFloat(state.qtyExtraSheets || 0) * 0.10;
-  const punchUnit  = (!isCase() && parseFloat(state.qtyTabs) > 0) ? (spineMM <= 14 ? 0.10 : 0.20) : 0;
 
   // Binding label with full context
   const bindLabel = [
@@ -405,10 +428,7 @@ function runCalculations() {
     { label: bindLabel,                                                                                           unit: bindUnit,                                                                  active: true },
     { label: 'Front Cover: ' + state.frontCoverName + ' (' + state.frontSource + ')',                            unit: (state.frontSource === 'Twin Loop' ? state.frontCoverCost : 0) + fSurcharge, active: state.frontCoverName !== 'None' },
     { label: 'Back Cover: '  + state.backCoverName  + ' (' + state.backSource  + ')',                            unit: (state.backSource  === 'Twin Loop' ? state.backCoverCost  : 0) + bSurcharge, active: state.backCoverName  !== 'None' },
-    { label: 'Glazing: ' + state.celloType,                                                                      unit: state.celloCost,                                                           active: state.celloCost > 0 },
-    { label: 'Index Tabs (' + state.qtyTabs + ')',                                                               unit: tabUnit,                                                                   active: tabUnit > 0 },
-    { label: 'Extra Sheets (' + state.qtyExtraSheets + ')',                                                      unit: sheetUnit,                                                                 active: sheetUnit > 0 },
-    { label: 'Hand Punching Surcharge',                                                                          unit: punchUnit,                                                                 active: punchUnit > 0 }
+    { label: 'Glazing: ' + state.celloType,                                                                      unit: state.celloCost,                                                           active: state.celloCost > 0 }
   ];
 
   state.selectedExtras.forEach(e => {
@@ -501,7 +521,7 @@ function runCalculations() {
       <div style="text-align:right;line-height:1.7;">
         <div style="font-size:20px;font-weight:bold;letter-spacing:2px;">QUOTE</div>
         <div><b>Quote #:</b> ${state.quoteNumber}</div>
-        ${state.customerReference ? `<div><b>Your Ref:</b> ${state.customerReference}</div>` : ''}
+        ${state.customerReference ? `<div><b>Estimate Request #:</b> ${state.customerReference}</div>` : ''}
         <div><b>Date:</b> ${fmtDate(today)}</div>
         <div><b>Valid Until:</b> ${fmtDate(valid)}</div>
       </div>
