@@ -98,7 +98,7 @@ function buildEmailHtml(state, computed) {
   const valid = new Date(); valid.setDate(today.getDate() + 30);
   const fDate = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  const { items, totals, hasCollating, collRate, collMin, celloSetupFee } = computed;
+  const { items, totals, hasCollating, collRate, collMin, celloSetupFee, bindSetups = [] } = computed;
   const leafCount = parseFloat(state.leafCount || 0);
 
   const qtyHeaders = state.qtys.map(q =>
@@ -124,6 +124,12 @@ function buildEmailHtml(state, computed) {
     <tr>
       <td style="padding:6px 14px;border-bottom:1px solid #f0f0f0;">Glazing Setup Fee</td>
       ${state.qtys.map(() => `<td style="text-align:right;padding:6px 14px;border-bottom:1px solid #f0f0f0;">$${fmt(celloSetupFee)}</td>`).join('')}
+    </tr>` : '';
+
+  const bindSetupRow = bindSetups.some(f => f > 0) ? `
+    <tr>
+      <td style="padding:6px 14px;border-bottom:1px solid #f0f0f0;">Binding Setup Fee</td>
+      ${bindSetups.map(f => `<td style="text-align:right;padding:6px 14px;border-bottom:1px solid #f0f0f0;">$${fmt(f)}</td>`).join('')}
     </tr>` : '';
 
   const discountRow = `
@@ -175,6 +181,7 @@ function buildEmailHtml(state, computed) {
       ${itemRows}
       ${collRow}
       ${setupRow}
+      ${bindSetupRow}
       ${discountRow}
       ${totalRow}
     </table>

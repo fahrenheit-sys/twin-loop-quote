@@ -149,6 +149,23 @@ const steps = [
 function isPerfect() { return state.bindCategory === 'Prefect Binding'; }
 function isCase()    { return state.bindCategory === 'Case Binding';    }
 
+// Binding setup fee (per quantity). EVA: flat $35. PUR: tiered by book qty. Case: flat $50.
+function bindSetupFee(q) {
+  if (isPerfect()) {
+    if (state.bindSubtype === 'Regular (EVA) Glue') return 35;
+    if (state.bindSubtype === 'Robust (PUR) Glue') {
+      if (q < 50)  return 50;
+      if (q < 75)  return 75;
+      if (q < 100) return 100;
+      if (q < 150) return 150;
+      return 200;
+    }
+    return 0;
+  }
+  if (isCase()) return 50;
+  return 0;
+}
+
 // ── Cover dashboard UI ────────────────────────────────────────────────────────
 function updateCoverUI() {
   const ft = document.getElementById('f-type').value;
@@ -407,13 +424,14 @@ function runCalculations() {
   const collRate      = db.collating?.rate || 10;
   const collMin       = db.collating?.min  || 50;
   const celloSetupFee = state.celloSetup   || 0;
+  const bindSetups    = state.qtys.map(q => bindSetupFee(q));
 
   // Per-qty totals
-  const totals = state.qtys.map(q => {
+  const totals = state.qtys.map((q, idx) => {
     const disc        = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length - 1];
     const perUnitSum  = activeItems.reduce((s, i) => s + i.unit, 0);
     const collCost    = hasCollating ? Math.max(collMin, (q * leafCount / 1000) * collRate) : 0;
-    const subtotal    = (perUnitSum * q) + collCost + celloSetupFee;
+    const subtotal    = (perUnitSum * q) + collCost + celloSetupFee + bindSetups[idx];
     const discRate    = disc.Rate;
     const discAmt     = subtotal * (discRate / 100);
     const afterDisc   = Math.max(50, subtotal - discAmt);
@@ -422,7 +440,7 @@ function runCalculations() {
   });
 
   // Stash for sendQuote()
-  window._quoteComputed = { spineMM, wireSize, items: activeItems, totals, hasCollating, collRate, collMin, celloSetupFee };
+  window._quoteComputed = { spineMM, wireSize, items: activeItems, totals, hasCollating, collRate, collMin, celloSetupFee, bindSetups };
 
   const today = new Date();
   const valid = new Date(); valid.setDate(today.getDate() + 30);
@@ -456,6 +474,12 @@ function runCalculations() {
     <tr style="border-bottom:1px solid #f0f0f0;">
       <td style="padding:6px 8px;">Glazing Setup Fee</td>
       ${state.qtys.map(() => `<td style="text-align:right;padding:6px 8px;">$${fmt(celloSetupFee)}</td>`).join('')}
+    </tr>` : '';
+
+  const bindSetupRow = bindSetups.some(f => f > 0) ? `
+    <tr style="border-bottom:1px solid #f0f0f0;">
+      <td style="padding:6px 8px;">Binding Setup Fee</td>
+      ${bindSetups.map(f => `<td style="text-align:right;padding:6px 8px;">$${fmt(f)}</td>`).join('')}
     </tr>` : '';
 
   const discountRow = `
@@ -499,6 +523,7 @@ function runCalculations() {
       ${itemRows}
       ${collRow}
       ${setupRow}
+      ${bindSetupRow}
       ${discountRow}
       ${totalRow}
     </table>
