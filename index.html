@@ -372,18 +372,16 @@ function runCalculations() {
   const leafCount = parseFloat(state.leafCount || 0);
   const spineMM   = (leafCount * state.leafMM) + state.frontCoverMM + state.backCoverMM;
 
-  // Wire size lookup
-  const impRow  = db.imperial.find(r => spineMM <= r.Max) || db.imperial[db.imperial.length - 1];
-  const wireSize = (isPerfect() || isCase()) ? null : impRow.Wire;
+  // Thickness bracket lookup — every binding type is priced by spine-thickness bracket.
+  const impRow   = db.imperial.find(r => spineMM <= r.Max) || db.imperial[db.imperial.length - 1];
+  const wireSize = impRow.Wire;
+  // The "Wire:" bracket is only shown to the customer for actual wire-type bindings, not perfect/case.
+  const showWire = !(isPerfect() || isCase());
 
-  // Binding unit cost
+  // Binding unit cost — nested as leaf size > thickness bracket for all categories.
   let bindUnit = 0;
   try {
-    if (isPerfect() || isCase()) {
-      bindUnit = parseFloat(db['binding-costs'][state.bindCategory][state.bindSubtype][state.leafSize] || 0);
-    } else {
-      bindUnit = parseFloat(db['binding-costs'][state.bindCategory][state.bindSubtype][state.leafSize][wireSize] || 0);
-    }
+    bindUnit = parseFloat((db['binding-costs'][state.bindCategory][state.bindSubtype][state.leafSize] || {})[wireSize] || 0);
   } catch (e) { bindUnit = 0; }
 
   // Surcharges
@@ -399,7 +397,7 @@ function runCalculations() {
     (state.bindSubtype && state.bindSubtype !== '-') ? state.bindSubtype : null,
     state.leafSize,
     leafCount + ' leaves',
-    wireSize ? 'Wire: ' + wireSize : null
+    showWire ? 'Wire: ' + wireSize : null
   ].filter(Boolean).join(' — ');
 
   let items = [
@@ -440,7 +438,7 @@ function runCalculations() {
   });
 
   // Stash for sendQuote()
-  window._quoteComputed = { spineMM, wireSize, items: activeItems, totals, hasCollating, collRate, collMin, celloSetupFee, bindSetups };
+  window._quoteComputed = { spineMM, wireSize: showWire ? wireSize : null, items: activeItems, totals, hasCollating, collRate, collMin, celloSetupFee, bindSetups };
 
   const today = new Date();
   const valid = new Date(); valid.setDate(today.getDate() + 30);
@@ -454,7 +452,7 @@ function runCalculations() {
     `<tr><td style="padding:3px 8px;color:#666;">Internal leaves:</td><td style="padding:3px 8px;">${leafCount} &times; ${state.leafMM}mm&nbsp;(${state.leafGSMValue}gsm) = <b>${leafStackMM}mm</b></td></tr>`,
     state.frontCoverName !== 'None' ? `<tr><td style="padding:3px 8px;color:#666;">Front cover (${state.frontCoverName}):</td><td style="padding:3px 8px;"><b>${state.frontCoverMM}mm</b></td></tr>` : '',
     state.backCoverName  !== 'None' ? `<tr><td style="padding:3px 8px;color:#666;">Back cover (${state.backCoverName}):</td><td style="padding:3px 8px;"><b>${state.backCoverMM}mm</b></td></tr>`   : '',
-    `<tr style="border-top:1px solid #ccc;"><td style="padding:5px 8px;font-weight:bold;color:#333;">Spine total:</td><td style="padding:5px 8px;font-weight:bold;">${spineMM.toFixed(2)}mm${wireSize ? ' &rarr; Wire size: <b>' + wireSize + '</b>' : ''}</td></tr>`
+    `<tr style="border-top:1px solid #ccc;"><td style="padding:5px 8px;font-weight:bold;color:#333;">Spine total:</td><td style="padding:5px 8px;font-weight:bold;">${spineMM.toFixed(2)}mm${showWire ? ' &rarr; Wire size: <b>' + wireSize + '</b>' : ''}</td></tr>`
   ].join('');
 
   // ── Pricing table rows ─────────────────────────────────────────────────────
