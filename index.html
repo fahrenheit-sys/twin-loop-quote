@@ -120,7 +120,7 @@ function initDefaults() {
     celloType: 'No', celloCost: 0, celloSetup: 0,
     hasInserts: 'No', qtyTabs: 0, qtyExtraSheets: 0,
     selectedExtras: [], bindCategory: '', bindSubtype: '', history: [],
-    customerName: '', customerCompany: '', customerEmail: '',
+    customerName: '', customerCompany: '', customerEmail: '', customerReference: '',
     quoteNumber: generateQuoteNumber()
   };
 }
@@ -136,10 +136,11 @@ const steps = [
   { id: 'gsm',             q: 'What paper weight (GSM)?',                 type: 'button',    source: 'gsm' },
   { id: 'coverDashboard',  q: 'Select your covers:',                      type: 'cover-dash', condition: () => !isPerfect() && !isCase() },
   { id: 'celloType',       q: 'Apply glazing or lamination to covers?',   type: 'button',    source: 'celloTypes', condition: () => isPerfect() },
-  { id: 'hasInserts',      q: 'Do you need any inserts?',                 type: 'button',    options: ['Yes', 'No'], condition: () => !isCase() },
-  { id: 'qtyTabs',         q: 'How many index tabs?',                     type: 'number',    condition: () => state.hasInserts === 'Yes' && !isCase() },
-  { id: 'qtyExtraSheets',  q: 'How many extra sheets?',                   type: 'number',    condition: () => state.hasInserts === 'Yes' && !isCase() },
+  { id: 'hasInserts',      q: 'Do you need any inserts?',                 type: 'button',    options: ['Yes', 'No'], condition: () => !isPerfect() && !isCase() },
+  { id: 'qtyTabs',         q: 'How many index tabs?',                     type: 'number',    condition: () => state.hasInserts === 'Yes' && !isPerfect() && !isCase() },
+  { id: 'qtyExtraSheets',  q: 'How many extra sheets?',                   type: 'number',    condition: () => state.hasInserts === 'Yes' && !isPerfect() && !isCase() },
   { id: 'extras',          q: 'Any production extras? (select all that apply)', type: 'multiselect' },
+  { id: 'customerReference', q: 'Your quote reference or PO number (optional):', type: 'text-input', placeholder: 'e.g. PO-12345', required: false },
   { id: 'customerName',    q: "Almost done! What's your name?",           type: 'text-input', placeholder: 'e.g. John Smith',     required: true  },
   { id: 'customerCompany', q: 'Company name (optional):',                 type: 'text-input', placeholder: 'e.g. Acme Corp',      required: false },
   { id: 'customerEmail',   q: 'Your email address (to receive the quote):', type: 'text-input', placeholder: 'e.g. john@acme.com', required: true  },
@@ -500,6 +501,7 @@ function runCalculations() {
       <div style="text-align:right;line-height:1.7;">
         <div style="font-size:20px;font-weight:bold;letter-spacing:2px;">QUOTE</div>
         <div><b>Quote #:</b> ${state.quoteNumber}</div>
+        ${state.customerReference ? `<div><b>Your Ref:</b> ${state.customerReference}</div>` : ''}
         <div><b>Date:</b> ${fmtDate(today)}</div>
         <div><b>Valid Until:</b> ${fmtDate(valid)}</div>
       </div>

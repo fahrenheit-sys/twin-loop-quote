@@ -162,6 +162,7 @@ function buildEmailHtml(state, computed) {
     <div style="text-align:right;">
       <div style="font-size:22px;font-weight:bold;letter-spacing:2px;">QUOTE</div>
       <div style="font-size:12px;color:#555;margin-top:2px;">${state.quoteNumber}</div>
+      ${state.customerReference ? `<div style="font-size:12px;color:#555;margin-top:2px;">Your Ref: ${state.customerReference}</div>` : ''}
     </div>
   </div>
 
