@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Twin Loop — Quote Admin</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #222; }
+
+/* ── Login ── */
+#login-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+}
+#login-card {
+  background: #fff; border-radius: 10px; padding: 40px; width: 340px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.12); text-align: center;
+}
+#login-card img { height: 40px; margin-bottom: 24px; }
+#login-card h1 { font-size: 18px; font-weight: 600; margin-bottom: 20px; color: #333; }
+#pwd-input {
+  width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px;
+  font-size: 15px; margin-bottom: 12px;
+}
+#login-btn {
+  width: 100%; padding: 12px; background: #000; color: #fff; border: none;
+  border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer;
+}
+#login-btn:hover { background: #333; }
+#login-error { color: #c0392b; font-size: 13px; margin-top: 10px; min-height: 18px; }
+
+/* ── App shell ── */
+#app { display: none; min-height: 100vh; }
+header {
+  background: #000; color: #fff; padding: 0 28px;
+  display: flex; align-items: center; gap: 16px; height: 56px;
+}
+header img { height: 28px; }
+header .title { font-size: 14px; font-weight: 600; letter-spacing: 1px; flex: 1; }
+#logout-btn {
+  background: transparent; border: 1px solid rgba(255,255,255,.4);
+  color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px;
+}
+#logout-btn:hover { background: rgba(255,255,255,.1); }
+
+/* ── Toolbar ── */
+#toolbar {
+  padding: 20px 28px 12px; display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+}
+#search {
+  padding: 9px 14px; border: 1px solid #ccc; border-radius: 6px;
+  font-size: 14px; width: 280px;
+}
+#quote-count { font-size: 13px; color: #666; }
+#status-filter {
+  padding: 9px 12px; border: 1px solid #ccc; border-radius: 6px;
+  font-size: 14px; background: #fff; cursor: pointer;
+}
+
+/* ── Table ── */
+#table-wrap { padding: 0 28px 40px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); font-size: 13px; }
+thead tr { background: #f7f8fa; border-bottom: 2px solid #e0e0e0; }
+th { padding: 11px 14px; text-align: left; font-weight: 600; color: #555; white-space: nowrap; cursor: pointer; user-select: none; }
+th:hover { color: #000; }
+tbody tr { border-bottom: 1px solid #f0f0f0; transition: background .1s; cursor: pointer; }
+tbody tr:hover { background: #f8f9ff; }
+tbody tr:last-child { border-bottom: none; }
+td { padding: 11px 14px; vertical-align: middle; }
+.badge {
+  display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 600;
+}
+.badge-sent     { background: #e8f5e9; color: #2e7d32; }
+.badge-amended  { background: #fff3e0; color: #e65100; }
+.badge-viewed   { background: #e3f2fd; color: #1565c0; }
+
+/* ── Modal backdrop ── */
+.modal-backdrop {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.45); z-index: 100; align-items: flex-start; justify-content: center;
+  padding: 40px 20px; overflow-y: auto;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: #fff; border-radius: 10px; width: 100%; max-width: 760px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.2); position: relative;
+}
+.modal-header {
+  padding: 20px 24px; border-bottom: 1px solid #eee;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-header h2 { font-size: 16px; font-weight: 600; }
+.modal-close {
+  background: none; border: none; font-size: 22px; cursor: pointer; color: #888; line-height: 1;
+}
+.modal-close:hover { color: #333; }
+.modal-body { padding: 24px; }
+.modal-footer {
+  padding: 16px 24px; border-top: 1px solid #eee;
+  display: flex; gap: 10px; justify-content: flex-end;
+}
+
+/* ── Detail layout ── */
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.detail-section { padding: 0 0 16px; }
+.detail-section h3 { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+.detail-row { display: flex; gap: 8px; margin-bottom: 5px; font-size: 13px; }
+.detail-label { color: #666; min-width: 110px; flex-shrink: 0; }
+.detail-value { color: #111; font-weight: 500; }
+
+.pricing-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.pricing-table th { background: #f5f5f5; padding: 8px 10px; text-align: right; border-bottom: 2px solid #ddd; font-weight: 600; }
+.pricing-table th:first-child { text-align: left; }
+.pricing-table td { padding: 7px 10px; text-align: right; border-bottom: 1px solid #f0f0f0; }
+.pricing-table td:first-child { text-align: left; color: #555; }
+.pricing-table .total-row td { font-weight: 700; background: #000; color: #fff; }
+
+/* ── Amend form ── */
+.form-group { margin-bottom: 18px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.form-group textarea, .form-group input[type="text"] {
+  width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px;
+  font-size: 14px; font-family: inherit; resize: vertical;
+}
+.form-group textarea:focus, .form-group input[type="text"]:focus {
+  outline: none; border-color: #000;
+}
+.qty-prices { display: flex; gap: 12px; flex-wrap: wrap; }
+.qty-price-field { flex: 1; min-width: 130px; }
+.qty-price-field label { font-size: 12px; font-weight: 600; color: #555; }
+.qty-price-field input { width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+
+.btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn-primary { background: #000; color: #fff; }
+.btn-primary:hover { background: #333; }
+.btn-primary:disabled { background: #999; cursor: not-allowed; }
+.btn-secondary { background: #f0f0f0; color: #333; }
+.btn-secondary:hover { background: #e0e0e0; }
+.btn-danger { background: #e67e22; color: #fff; }
+.btn-danger:hover { background: #d35400; }
+
+.amendment-history {
+  background: #fff8f0; border: 1px solid #f0d9b5; border-radius: 6px;
+  padding: 12px 16px; margin-top: 16px; font-size: 13px; line-height: 1.6;
+}
+.amendment-history h4 { font-size: 11px; font-weight: 700; color: #e67e22; text-transform: uppercase; margin-bottom: 6px; }
+
+#amend-status { font-size: 13px; color: #666; }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-wrap">
+  <div id="login-card">
+    <img src="/logo.png" alt="Twin Loop">
+    <h1>Quote Admin</h1>
+    <input type="password" id="pwd-input" placeholder="Password" onkeydown="if(event.key==='Enter')login()">
+    <button id="login-btn" onclick="login()">Login</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <header>
+    <img src="/logo.png" alt="Twin Loop">
+    <span class="title">QUOTE ADMIN</span>
+    <button id="logout-btn" onclick="logout()">Logout</button>
+  </header>
+
+  <div id="toolbar">
+    <input type="search" id="search" placeholder="Search by name, company, quote #, binding…" oninput="renderTable()">
+    <select id="status-filter" onchange="renderTable()">
+      <option value="">All statuses</option>
+      <option value="sent">Sent</option>
+      <option value="amended">Amended</option>
+    </select>
+    <span id="quote-count"></span>
+  </div>
+
+  <div id="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th onclick="sortBy('created_at')">Date ↕</th>
+          <th onclick="sortBy('quote_number')">Quote #</th>
+          <th onclick="sortBy('customer_name')">Customer</th>
+          <th>Email</th>
+          <th onclick="sortBy('bind_category')">Binding</th>
+          <th>Quantities</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="quotes-body"></tbody>
+    </table>
+    <div id="empty-state" style="display:none;text-align:center;padding:60px;color:#888;font-size:14px;">No quotes found.</div>
+    <div id="loading-state" style="text-align:center;padding:60px;color:#888;font-size:14px;">Loading quotes…</div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div id="detail-modal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="detail-title">Quote Detail</h2>
+      <button class="modal-close" onclick="closeDetail()">×</button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeDetail()">Close</button>
+      <button class="btn btn-danger" id="open-amend-btn" onclick="openAmend()">Send Amendment</button>
+    </div>
+  </div>
+</div>
+
+<!-- Amend Modal -->
+<div id="amend-modal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="amend-title">Send Amendment</h2>
+      <button class="modal-close" onclick="closeAmend()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Amendment note <span style="font-weight:400;color:#888;">(sent to client)</span></label>
+        <textarea id="amend-note" rows="5" placeholder="Explain what has changed and why…"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Adjusted totals (inc GST) <span style="font-weight:400;color:#888;">— optional, leave blank to use originals</span></label>
+        <div class="qty-prices" id="qty-price-inputs"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span id="amend-status"></span>
+      <button class="btn btn-secondary" onclick="closeAmend()">Cancel</button>
+      <button class="btn btn-danger" id="send-amend-btn" onclick="sendAmendment()">Send Amended Quote</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let token     = sessionStorage.getItem('tl_admin_token') || '';
+let allQuotes = [];
+let sortKey   = 'created_at';
+let sortAsc   = false;
+let selected  = null;
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+async function login() {
+  const pwd = document.getElementById('pwd-input').value.trim();
+  if (!pwd) return;
+  const btn = document.getElementById('login-btn');
+  btn.textContent = 'Checking…';
+  btn.disabled = true;
+
+  // Validate by attempting a quotes fetch
+  const resp = await fetch('/api/admin-quotes', {
+    headers: { 'Authorization': 'Bearer ' + pwd }
+  });
+
+  if (resp.ok) {
+    token = pwd;
+    sessionStorage.setItem('tl_admin_token', token);
+    document.getElementById('login-wrap').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    const data = await resp.json();
+    allQuotes = data;
+    renderTable();
+  } else {
+    document.getElementById('login-error').textContent = 'Incorrect password.';
+    btn.textContent = 'Login';
+    btn.disabled = false;
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem('tl_admin_token');
+  token = '';
+  document.getElementById('login-wrap').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('pwd-input').value = '';
+  document.getElementById('login-error').textContent = '';
+}
+
+// ── Load quotes ───────────────────────────────────────────────────────────────
+async function loadQuotes() {
+  const resp = await fetch('/api/admin-quotes', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  if (!resp.ok) { logout(); return; }
+  allQuotes = await resp.json();
+  renderTable();
+}
+
+// ── Table rendering ───────────────────────────────────────────────────────────
+function sortBy(key) {
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = false; }
+  renderTable();
+}
+
+function renderTable() {
+  const q      = (document.getElementById('search').value || '').toLowerCase();
+  const status = document.getElementById('status-filter').value;
+
+  let rows = allQuotes.filter(r => {
+    if (status && (r.status || 'sent') !== status) return false;
+    if (!q) return true;
+    return [r.quote_number, r.customer_name, r.customer_company, r.customer_email,
+            r.bind_category, r.bind_subtype].some(v => v && v.toLowerCase().includes(q));
+  });
+
+  rows.sort((a, b) => {
+    const av = a[sortKey] || '', bv = b[sortKey] || '';
+    return sortAsc ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+  });
+
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('quote-count').textContent = rows.length + ' quote' + (rows.length !== 1 ? 's' : '');
+
+  const tbody = document.getElementById('quotes-body');
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    document.getElementById('empty-state').style.display = 'block';
+    return;
+  }
+  document.getElementById('empty-state').style.display = 'none';
+
+  tbody.innerHTML = rows.map(r => {
+    const status  = r.status || 'sent';
+    const date    = r.created_at ? new Date(r.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+    const totals  = r.totals || [];
+    const highest = totals.length ? '$' + fmtNum(totals[totals.length - 1].totalIncGST) : '—';
+    const qtys    = (r.quantities || []).join(', ');
+    const binding = r.bind_category === 'Prefect Binding' ? 'Perfect Binding' : (r.bind_category || '—');
+
+    return `<tr onclick="openDetail('${r.quote_number}')">
+      <td style="white-space:nowrap;">${date}</td>
+      <td style="font-family:monospace;">${r.quote_number || '—'}</td>
+      <td><strong>${esc(r.customer_name || '—')}</strong>${r.customer_company ? '<br><span style="font-size:12px;color:#666;">' + esc(r.customer_company) + '</span>' : ''}</td>
+      <td style="font-size:12px;">${esc(r.customer_email || '—')}</td>
+      <td>${esc(binding)}${r.bind_subtype ? '<br><span style="font-size:11px;color:#888;">' + esc(r.bind_subtype) + '</span>' : ''}</td>
+      <td style="font-size:12px;">${esc(qtys)}</td>
+      <td><span class="badge badge-${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span></td>
+      <td><button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;" onclick="event.stopPropagation();openDetail('${r.quote_number}')">View</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Detail modal ──────────────────────────────────────────────────────────────
+function openDetail(quoteNumber) {
+  selected = allQuotes.find(q => q.quote_number === quoteNumber);
+  if (!selected) return;
+
+  const r       = selected;
+  const status  = r.status || 'sent';
+  const date    = r.created_at ? new Date(r.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+  const binding = r.bind_category === 'Prefect Binding' ? 'Perfect Binding' : (r.bind_category || '—');
+  const totals  = r.totals || [];
+  const qtys    = r.quantities || [];
+
+  document.getElementById('detail-title').textContent = 'Quote ' + r.quote_number;
+
+  const pricingRows = totals.map(t => `
+    <tr>
+      <td>Subtotal (ex GST)</td>
+      ${qtys.map((q, i) => `<td>$${fmtNum(totals[i] ? totals[i].afterDisc : 0)}</td>`).join('')}
+    </tr>
+    <tr>
+      <td>GST (10%)</td>
+      ${qtys.map((q, i) => `<td>$${fmtNum(totals[i] ? totals[i].gst : 0)}</td>`).join('')}
+    </tr>`).slice(0, 1).join('');
+
+  const qtyHeaders = qtys.map(q => `<th>Qty ${q}</th>`).join('');
+
+  document.getElementById('detail-body').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-section">
+        <h3>Customer</h3>
+        <div class="detail-row"><span class="detail-label">Name</span><span class="detail-value">${esc(r.customer_name || '—')}</span></div>
+        <div class="detail-row"><span class="detail-label">Company</span><span class="detail-value">${esc(r.customer_company || '—')}</span></div>
+        <div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">${esc(r.customer_email || '—')}</span></div>
+        ${r.customer_reference ? `<div class="detail-row"><span class="detail-label">Est. Request #</span><span class="detail-value">${esc(r.customer_reference || '')}</span></div>` : ''}
+      </div>
+      <div class="detail-section">
+        <h3>Job Details</h3>
+        <div class="detail-row"><span class="detail-label">Date</span><span class="detail-value">${date}</span></div>
+        <div class="detail-row"><span class="detail-label">Binding</span><span class="detail-value">${esc(binding)}${r.bind_subtype ? ' — ' + esc(r.bind_subtype) : ''}</span></div>
+        <div class="detail-row"><span class="detail-label">Size</span><span class="detail-value">${esc(r.leaf_size || '—')}</span></div>
+        <div class="detail-row"><span class="detail-label">Pages</span><span class="detail-value">${r.leaf_count ? r.leaf_count * 2 + ' pp (' + r.leaf_count + ' leaves)' : '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">GSM</span><span class="detail-value">${r.gsm || '—'}gsm</span></div>
+        <div class="detail-row"><span class="detail-label">Spine</span><span class="detail-value">${r.spine_mm ? r.spine_mm + 'mm' : '—'}${r.wire_size ? ' → Wire: ' + r.wire_size : ''}</span></div>
+        <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="badge badge-${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span></span></div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <h3 style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Pricing</h3>
+      <table class="pricing-table">
+        <thead><tr><th>Description</th>${qtyHeaders}</tr></thead>
+        <tbody>
+          <tr>
+            <td>Subtotal (ex GST)</td>
+            ${qtys.map((q, i) => `<td>$${fmtNum(totals[i] ? totals[i].afterDisc : 0)}</td>`).join('')}
+          </tr>
+          <tr>
+            <td>GST (10%)</td>
+            ${qtys.map((q, i) => `<td>$${fmtNum(totals[i] ? totals[i].gst : 0)}</td>`).join('')}
+          </tr>
+          <tr class="total-row">
+            <td>TOTAL (INC GST)</td>
+            ${qtys.map((q, i) => `<td>$${fmtNum(totals[i] ? totals[i].totalIncGST : 0)}</td>`).join('')}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    ${r.amendment_note ? `
+    <div class="amendment-history">
+      <h4>Amendment sent ${r.amended_at ? new Date(r.amended_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</h4>
+      <p>${esc(r.amendment_note).replace(/\n/g, '<br>')}</p>
+    </div>` : ''}
+  `;
+
+  document.getElementById('detail-modal').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail-modal').classList.remove('open');
+}
+
+// ── Amend modal ───────────────────────────────────────────────────────────────
+function openAmend() {
+  if (!selected) return;
+  const qtys   = selected.quantities || [];
+  const totals = selected.totals || [];
+
+  document.getElementById('amend-title').textContent = 'Amend Quote ' + selected.quote_number;
+  document.getElementById('amend-note').value = '';
+  document.getElementById('amend-status').textContent = '';
+
+  // Build per-quantity price inputs
+  document.getElementById('qty-price-inputs').innerHTML = qtys.map((q, i) => {
+    const current = totals[i] ? fmtNum(totals[i].totalIncGST) : '';
+    return `<div class="qty-price-field">
+      <label>Qty ${q} (current: $${current})</label>
+      <input type="text" id="amend-qty-${i}" placeholder="${current}" value="">
+    </div>`;
+  }).join('');
+
+  closeDetail();
+  document.getElementById('amend-modal').classList.add('open');
+}
+
+function closeAmend() {
+  document.getElementById('amend-modal').classList.remove('open');
+}
+
+async function sendAmendment() {
+  const note = document.getElementById('amend-note').value.trim();
+  if (!note) { alert('Please enter an amendment note.'); return; }
+
+  const qtys   = selected.quantities || [];
+  const totals = selected.totals || [];
+
+  // Collect amended totals — only include if value entered and different
+  const amendedTotals = qtys.map((q, i) => {
+    const input = document.getElementById('amend-qty-' + i);
+    const val   = parseFloat((input ? input.value : '').replace(/[^0-9.]/g, ''));
+    const orig  = totals[i] ? totals[i].totalIncGST : null;
+    return {
+      qty:          q,
+      totalIncGST:  isNaN(val) ? orig : val,
+      afterDisc:    totals[i] ? totals[i].afterDisc : null,
+      gst:          totals[i] ? totals[i].gst : null,
+    };
+  }).filter(t => t.totalIncGST !== null);
+
+  const btn = document.getElementById('send-amend-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  document.getElementById('amend-status').textContent = '';
+
+  const resp = await fetch('/api/admin-amend', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      quoteNumber:   selected.quote_number,
+      amendmentNote: note,
+      amendedTotals: amendedTotals.length ? amendedTotals : null
+    })
+  });
+
+  const data = await resp.json().catch(() => ({}));
+
+  if (resp.ok && data.success) {
+    btn.textContent = '✓ Amendment Sent';
+    btn.style.background = '#2e7d32';
+    document.getElementById('amend-status').textContent = 'Email sent to ' + selected.customer_email;
+    // Refresh quotes list
+    await loadQuotes();
+    setTimeout(() => { closeAmend(); btn.textContent = 'Send Amended Quote'; btn.style.background = ''; btn.disabled = false; }, 2000);
+  } else {
+    document.getElementById('amend-status').textContent = 'Error: ' + (data.error || 'Unknown error');
+    btn.textContent = 'Send Amended Quote';
+    btn.disabled = false;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fmtNum = v => v != null ? new Intl.NumberFormat('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) : '—';
+const esc    = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// ── Auto-login if token in session ────────────────────────────────────────────
+if (token) {
+  document.getElementById('login-wrap').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  loadQuotes();
+}
+</script>
+</body>
+</html>
