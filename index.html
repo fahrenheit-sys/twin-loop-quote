@@ -513,9 +513,8 @@ function runCalculations() {
     const discRate    = disc.Rate;
     const discAmt     = subtotal * (discRate / 100);
     const preMin      = subtotal - discAmt;
-    const minFloorExGST = minCharge / 1.1;
-    const afterDisc   = Math.max(minFloorExGST, preMin);
-    const minApplied  = preMin < minFloorExGST;
+    const afterDisc   = Math.max(minCharge, preMin);
+    const minApplied  = preMin < minCharge;
     const minUplift   = minApplied ? afterDisc - preMin : 0;
     const gst         = afterDisc * 0.10;
     return { qty: q, discountPct: discRate, discountAmt: discAmt, afterDisc, minApplied, minUplift, gst, totalIncGST: afterDisc + gst };
