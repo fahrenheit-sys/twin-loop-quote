@@ -15,60 +15,87 @@ const BINDING_INFO_PDF_URLS = {
   'Plastic Comb':   [], // TODO: add URL when available
 };
 
+const FAST_TRACK_DEFAULT = `<p>Should you wish to proceed with the quote please send us a purchase order with the quote number. (Samples are always helpful especially if collating is involved.) If your job is time critical please email us as soon as possible so we can prepare ourselves and allocate production time to help meet your deadline.</p>`;
+
 // ── Per-binding email template ────────────────────────────────────────────────
 function getBindingTemplate(bindCategory, bindSubtype) {
   if (bindCategory === 'Prefect Binding') {
     if (bindSubtype === 'Robust (PUR) Glue') {
       return {
         subjectType: 'PUR Perfect Binding',
-        intro: `Thank you for your quote request. Please find your <strong>PUR Perfect Binding</strong> estimate below.<br><br>
-PUR glue offers superior strength and flexibility compared to standard EVA — ideal for high-use documents, training manuals, and anything that needs to withstand repeated opening and closing. Books will lie flat and remain intact even under heavy use.`,
-        note: 'PUR binding takes slightly longer to cure than EVA but delivers a significantly stronger result. Recommended for documents over 200 pages or with heavy cover stock.'
+        greeting: 'Please find our quote for PUR Perfect Binding.',
+        specsHtml: `
+          <p>Please find attached the PDF outlining how we require the covers to be set out and how much bleed to provide on the text.</p>
+          <p>We require coloured or oversized slip / divider sheets between each book.</p>
+          <p>The minimum thickness we can PUR bind is 2mm and the recommended cover thickness is 300gsm with the maximum thickness of 350gsm cover.</p>
+          <p>When supplying the covers please do not prescore and please do not pre trim the covers (leave this for us). Please follow our set up guidelines ensuring there is a 5mm ink free area either side of the inside spine.</p>
+          <p>If there is any image on the inside covers that flows onto the first or last page of the book, then you need to shift the image on the inside cover and first and last page 6mm away from the binding edge (spine).</p>`,
+        fastTrackHtml: `<p>Should you wish to proceed with the quote please send us a purchase order with the quote number. (Samples are always helpful especially if collating is involved.) Please supply us with overs in text and covers (a minimum of 5 overs in covers for line up and make readies). If your job is time critical please email us as soon as possible so we can prepare ourselves and allocate production time to help meet your deadline.</p>`,
       };
     }
+    // EVA (default for Perfect Binding)
     return {
-      subjectType: 'Perfect Binding',
-      intro: `Thank you for your quote request. Please find your <strong>Perfect Binding</strong> estimate below.<br><br>
-Perfect binding produces a professional flat spine and is ideal for books, catalogues, reports, and magazines. It's a cost-effective way to present your document with a polished, retail-quality finish.`,
-      note: 'EVA perfect binding is suitable for standard use documents kept in normal temperature conditions.'
+      subjectType: 'EVA Perfect Binding',
+      greeting: 'Please find our quote for regular EVA Perfect Binding.',
+      specsHtml: `
+        <p>Please find attached the PDF outlining how we require the covers to be set out and how much bleed to provide on the text.</p>
+        <p>We require coloured or oversized slip / divider sheets between each book.</p>
+        <p>The minimum thickness we can EVA bind is 1.5mm and the recommended cover thickness is 300gsm with the maximum thickness of 350gsm cover.</p>
+        <p>When supplying the covers please do not prescore and please do not pre trim the covers (leave this for us). Please follow our set up guidelines ensuring there is a 5mm ink free area either side of the inside spine.</p>
+        <p>If there is any image on the inside covers that flows onto the first or last page of the book, then you need to shift the image on the inside cover and first and last page 6mm away from the binding edge (spine).</p>`,
+      fastTrackHtml: `<p>Should you wish to proceed with the quote please send us a purchase order with the quote number. (Samples are always helpful especially if collating is involved.) Please supply us with overs in text and covers (a minimum of 5 overs in covers for line up and make readies). If your job is time critical please email us as soon as possible so we can prepare ourselves and allocate production time to help meet your deadline.</p>`,
     };
   }
+
   if (bindCategory === 'Case Binding') {
     return {
-      subjectType: 'Case Binding (Hardcover)',
-      intro: `Thank you for your quote request. Please find your <strong>Case Binding (Hardcover)</strong> estimate below.<br><br>
-Case binding is our premium option, producing a durable hardcover book built to last. It's perfect for reference manuals, annual reports, commemorative publications, and anything that needs to make a lasting impression.`,
-      note: 'Case bound books are hand-finished to the highest standard. Please allow additional production time compared to softcover binding options.'
+      subjectType: 'Case Binding',
+      greeting: 'Please find our quote for Case Binding. This estimate includes Twin Loop Binding first binding a PUR text block, then manufacturing a hard cover and then casing in of the covers to the text block.',
+      specsHtml: `
+        <p>Please supply covers flat without trimming and without scoring; the stock should be between 170gsm and 180gsm. The covers need to have a 15mm bleed turn in.</p>
+        <p>If you are supplying the end sheets please make sure that you are not using glossy stock.</p>
+        <p>Please supply at least 10 overs of covers or 5% for manufacturing and set ups.</p>
+        <p>We will supply plain folded end sheets; however if you require print on your end sheets then you will need to supply us the printed end sheets folded to final size.</p>
+        <p>Please find attached the PDF outlining how we require the covers to be set out and how much bleed to provide including the turn in.</p>`,
+      fastTrackHtml: FAST_TRACK_DEFAULT,
     };
   }
+
   if (bindCategory === 'Wire Binding') {
     return {
       subjectType: 'Wire Binding',
-      intro: `Thank you for your quote request. Please find your <strong>Wire (Twin-Loop) Binding</strong> estimate below.<br><br>
-Wire binding allows documents to open completely flat and rotate a full 360° — perfect for workbooks, training manuals, calendars, and presentations that need to stay open hands-free on a desk or lectern.`,
-      note: 'Wire bound documents are available in black or silver wire. Please let us know your preference when placing your order.'
+      greeting: 'Please find our quote for Twin Loop Wire Binding with a ½ Canadian finish.',
+      specsHtml: `
+        <p>We only require divider sheets if we are required to add PVC fronts or backing boards. Covers need to be supplied flat and scored &mdash; please use the attached set up guidelines to ensure the correct size covers are supplied.</p>`,
+      fastTrackHtml: FAST_TRACK_DEFAULT,
     };
   }
+
   if (bindCategory === 'Plastic Spiral') {
     return {
       subjectType: 'Plastic Spiral Binding',
-      intro: `Thank you for your quote request. Please find your <strong>Plastic Spiral (Coil) Binding</strong> estimate below.<br><br>
-Plastic coil binding offers a flexible, durable finish and is available in a wide range of colours to match your brand. Documents open completely flat, making it a popular choice for workbooks, planners, and training materials.`,
-      note: 'Plastic coil is available in a large range of standard colours. Contact us to discuss colour options for your project.'
+      greeting: 'Please find our quote for Plastic Spiral Binding. Should you wish to proceed with the quote please supply the quote number with your purchase order.',
+      specsHtml: `
+        <p>We only require divider sheets if we are required to add PVC fronts or backing boards. Please remember to keep your image at least 10mm away from where we will be punching.</p>`,
+      fastTrackHtml: FAST_TRACK_DEFAULT,
     };
   }
+
   if (bindCategory === 'Plastic Comb') {
     return {
       subjectType: 'Plastic Comb Binding',
-      intro: `Thank you for your quote request. Please find your <strong>Plastic Comb Binding</strong> estimate below.<br><br>
-Plastic comb binding is an economical and practical choice for internal documents, reports, and training materials. One of its key advantages is that documents can be easily updated — the comb can be re-opened to add, remove, or replace pages.`,
-      note: 'Comb bound documents are easy to update in-house, making them ideal for documents that are revised regularly.'
+      greeting: 'Please find our quote for Plastic Comb Binding. Should you wish to proceed with the quote please supply the quote number with your purchase order.',
+      specsHtml: `
+        <p>We only require divider sheets if we are required to add PVC fronts or backing boards. Please remember to keep your image at least 10mm away from where we will be punching.</p>`,
+      fastTrackHtml: FAST_TRACK_DEFAULT,
     };
   }
+
   return {
     subjectType: 'Binding',
-    intro: 'Thank you for your quote request. Please find your estimate below.',
-    note: ''
+    greeting: 'Please find our quote below.',
+    specsHtml: '',
+    fastTrackHtml: FAST_TRACK_DEFAULT,
   };
 }
 
@@ -123,7 +150,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ success: true, note: 'No email address — quote saved only' });
   }
 
-  const template = getBindingTemplate(state.bindCategory, state.bindSubtype);
+  const template  = getBindingTemplate(state.bindCategory, state.bindSubtype);
   const emailHtml = buildEmailHtml(state, computed, template);
 
   // ── 3. Build attachments ──────────────────────────────────────────────────
@@ -143,7 +170,7 @@ module.exports = async function handler(req, res) {
       if (resp.ok) {
         const buf  = await resp.arrayBuffer();
         const b64  = Buffer.from(buf).toString('base64');
-        const name = url.split('/').pop(); // use the original filename
+        const name = url.split('/').pop();
         attachments.push({ filename: name, content: b64 });
       }
     } catch (e) {
@@ -192,7 +219,8 @@ function buildEmailHtml(state, computed, template) {
   const fDate = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
 
   const { items, totals, collatingLines = [], celloSetupFee, bindSetups = [] } = computed;
-  const leafCount = parseFloat(state.leafCount || 0);
+  const leafCount    = parseFloat(state.leafCount || 0);
+  const customerName = state.customerName || 'there';
 
   const qtyHeaders = state.qtys.map(q =>
     `<th style="text-align:right;padding:8px 14px;background:#f2f2f2;border-bottom:2px solid #000;">Qty&nbsp;${q}</th>`
@@ -231,7 +259,7 @@ function buildEmailHtml(state, computed, template) {
   const minChargeRow = totals.some(t => t.minApplied) ? `
     <tr>
       <td style="padding:6px 14px;font-style:italic;color:#777;">Minimum charge applied</td>
-      ${totals.map(t => `<td style="text-align:right;padding:6px 14px;font-style:italic;color:#777;">${t.minApplied ? '+$' + fmt(t.minUplift) : '—'}</td>`).join('')}
+      ${totals.map(t => `<td style="text-align:right;padding:6px 14px;font-style:italic;color:#777;">${t.minApplied ? '+$' + fmt(t.minUplift) : '&mdash;'}</td>`).join('')}
     </tr>` : '';
 
   const totalRow = `
@@ -253,26 +281,28 @@ function buildEmailHtml(state, computed, template) {
 <body style="margin:0;padding:20px;background:#f5f5f5;font-family:'Segoe UI',Arial,sans-serif;">
 <div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.12);">
 
+  <!-- Header -->
   <div style="padding:24px 32px;border-bottom:2px solid #000;display:flex;justify-content:space-between;align-items:center;">
     <img src="https://www.twinloop.com.au/wp-content/uploads/2021/06/twinloop-header-logo-blueonwhite-@2x.png" height="45" alt="Twin Loop Binding">
     <div style="text-align:right;">
       <div style="font-size:22px;font-weight:bold;letter-spacing:2px;">QUOTE</div>
       <div style="font-size:12px;color:#555;margin-top:2px;">${state.quoteNumber}</div>
       ${state.customerReference ? `<div style="font-size:12px;color:#555;margin-top:2px;">Estimate Request #: ${state.customerReference}</div>` : ''}
+      <div style="font-size:12px;color:#555;margin-top:2px;">Date: ${fDate(today)}</div>
     </div>
   </div>
 
-  <div style="padding:20px 32px;background:#f8f9fa;border-bottom:1px solid #eee;">
-    <p style="margin:0 0 2px;font-size:12px;color:#777;">Prepared for:</p>
-    <p style="margin:0;font-size:16px;font-weight:bold;">${state.customerName || ''}</p>
-    ${state.customerCompany ? `<p style="margin:2px 0 0;font-size:13px;color:#555;">${state.customerCompany}</p>` : ''}
-    <p style="margin:8px 0 0;font-size:12px;color:#666;">Date: ${fDate(today)} &nbsp;&bull;&nbsp; Valid until: ${fDate(valid)}</p>
+  <!-- Greeting + specs -->
+  <div style="padding:24px 32px;border-bottom:1px solid #eee;font-size:13px;line-height:1.8;color:#333;">
+    <p style="margin:0 0 16px;">Dear ${customerName},</p>
+    <p style="margin:0 0 16px;">${template.greeting}</p>
+
+    ${template.specsHtml ? `
+    <p style="margin:20px 0 8px;font-weight:bold;font-size:13px;">Our specifications</p>
+    <div style="color:#444;line-height:1.8;">${template.specsHtml}</div>` : ''}
   </div>
 
-  <div style="padding:20px 32px;border-bottom:1px solid #eee;font-size:13px;line-height:1.7;color:#333;">
-    ${template.intro}
-  </div>
-
+  <!-- Pricing table -->
   <div style="padding:24px 32px;">
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <tr style="border-bottom:2px solid #000;">
@@ -289,35 +319,46 @@ function buildEmailHtml(state, computed, template) {
     </table>
   </div>
 
+  <!-- Technical details -->
   <div style="padding:16px 32px;background:#f4f4f4;border-top:1px solid #ddd;font-size:12px;color:#555;">
     <strong>Technical Details:</strong><br>
     <span style="line-height:2;">${techDetails}</span>
   </div>
 
-  ${template.note ? `
-  <div style="padding:14px 32px;background:#fffbf0;border-top:1px solid #f0e0a0;font-size:12px;color:#7a6000;">
-    <strong>Note:</strong> ${template.note}
-  </div>` : ''}
+  <!-- Fast tracking -->
+  <div style="padding:24px 32px;border-top:1px solid #eee;font-size:13px;line-height:1.8;color:#333;">
+    <p style="margin:0 0 8px;font-weight:bold;">Fast Tracking Your Job</p>
+    <div>${template.fastTrackHtml}</div>
+  </div>
 
-  <div style="padding:20px 32px;border-top:1px solid #eee;font-size:12px;color:#666;">
+  <!-- Validity + sign-off -->
+  <div style="padding:0 32px 24px;font-size:13px;line-height:1.8;color:#333;">
+    <p style="margin:0 0 16px;">This quote is valid for 30 days. If you have any questions regarding our quote, please contact us either by email <a href="mailto:quotes@twinloop.com.au" style="color:#000;">quotes@twinloop.com.au</a> or by phone on <a href="tel:1300657850" style="color:#000;">1300 657 850</a>.</p>
+    <p style="margin:0 0 4px;">Thanking you,</p>
+    <p style="margin:0 0 4px;font-weight:bold;">Kind regards,</p>
+    <p style="margin:0 0 2px;">Wayne Rubin &mdash; Managing Director</p>
+    <p style="margin:0;"><a href="mailto:wayne@twinloop.com.au" style="color:#000;">wayne@twinloop.com.au</a></p>
+  </div>
+
+  <!-- Contact footer -->
+  <div style="padding:20px 32px;background:#f8f9fa;border-top:2px solid #000;font-size:12px;color:#555;">
     <table style="width:100%;border-collapse:collapse;">
       <tr>
         <td style="padding:4px 0;vertical-align:top;width:40%;">
-          <strong>Twin Loop Binding</strong><br>
-          15 Hugh Street<br>
-          Belmore, NSW 2192
+          <strong>Twin Loop Binding Pty Ltd</strong><br>
+          15 Hugh Street, Belmore 2192
         </td>
-        <td style="padding:4px 0;vertical-align:top;width:30%;">
-          <a href="tel:1300657850" style="color:#000;">1300 657 850</a><br>
+        <td style="padding:4px 0;vertical-align:top;">
+          P &nbsp;<a href="tel:1300657850" style="color:#000;">1300 657 850</a><br>
           <a href="mailto:quotes@twinloop.com.au" style="color:#000;">quotes@twinloop.com.au</a><br>
-          <a href="https://www.twinloop.com.au" style="color:#000;">twinloop.com.au</a>
+          <a href="https://www.twinloop.com.au" style="color:#000;">www.twinloop.com.au</a>
         </td>
         <td style="padding:4px 0;vertical-align:top;text-align:right;color:#999;font-size:11px;">
           ABN 78 082 258 035
         </td>
       </tr>
     </table>
-    <p style="margin:12px 0 0;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:10px;">All prices in AUD and include GST. Quote valid for 30 days from date of issue.</p>
+    <p style="margin:10px 0 0;font-size:11px;color:#aaa;border-top:1px solid #ddd;padding-top:10px;">All prices in AUD and include GST. Quote valid for 30 days from date of issue.</p>
   </div>
 
 </div>
