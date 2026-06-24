@@ -1,11 +1,18 @@
 // ── Binding info PDF URLs ─────────────────────────────────────────────────────
-// Fill in the URL for each binding type once the client provides them.
+// Each binding type can have one or more setup guide PDFs attached to quotes.
 const BINDING_INFO_PDF_URLS = {
-  'Prefect Binding': null, // TODO: e.g. 'https://twinloop.com.au/pdfs/perfect-binding.pdf'
-  'Case Binding':    null, // TODO
-  'Wire Binding':    null, // TODO
-  'Plastic Spiral':  null, // TODO
-  'Plastic Comb':    null, // TODO
+  'Prefect Binding': [
+    'https://www.twinloop.com.au/wp-content/uploads/2021/06/Perfect-Binding-Layout-Guidlines_Jul-21.pdf',
+  ],
+  'Case Binding': [
+    'https://www.twinloop.com.au/wp-content/uploads/2021/06/Case-Binding-Guidlines-March-2025-v2.pdf',
+  ],
+  'Wire Binding': [
+    'https://www.twinloop.com.au/wp-content/uploads/2021/06/Half-Canadian-Layout-Guidlines_July-21.pdf',
+    'https://www.twinloop.com.au/wp-content/uploads/2021/06/Set-Up-Help_Full-Canadian-Layout-Guidelines.pdf',
+  ],
+  'Plastic Spiral': [], // TODO: add URL when available
+  'Plastic Comb':   [], // TODO: add URL when available
 };
 
 // ── Per-binding email template ────────────────────────────────────────────────
@@ -129,18 +136,18 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  const infoUrl = BINDING_INFO_PDF_URLS[state.bindCategory];
-  if (infoUrl) {
+  const infoUrls = BINDING_INFO_PDF_URLS[state.bindCategory] || [];
+  for (const url of infoUrls) {
     try {
-      const resp = await fetch(infoUrl);
+      const resp = await fetch(url);
       if (resp.ok) {
         const buf  = await resp.arrayBuffer();
         const b64  = Buffer.from(buf).toString('base64');
-        const name = state.bindCategory.replace(/[^a-z0-9]/gi, '-') + '-Info.pdf';
+        const name = url.split('/').pop(); // use the original filename
         attachments.push({ filename: name, content: b64 });
       }
     } catch (e) {
-      console.error('Failed to fetch binding info PDF:', e.message);
+      console.error('Failed to fetch binding info PDF:', url, e.message);
     }
   }
 
