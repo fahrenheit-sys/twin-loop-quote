@@ -667,39 +667,34 @@ async function sendQuote() {
   try {
     const printArea = document.getElementById('print-area');
 
-    // Hide buttons and remove overflow clipping so the full width renders
-    const noPrint = printArea.querySelectorAll('.no-print');
-    noPrint.forEach(el => { el._prevDisplay = el.style.display; el.style.display = 'none'; });
-    const overflowEls = printArea.querySelectorAll('[style*="overflow-x"]');
-    overflowEls.forEach(el => { el._prevOverflowX = el.style.overflowX; el.style.overflowX = 'visible'; });
+    // Clone into a fixed-width off-screen container for consistent layout
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:#fff;';
+    const clone = printArea.cloneNode(true);
+    clone.querySelectorAll('.no-print').forEach(el => el.style.display = 'none');
+    clone.querySelectorAll('[style*="overflow-x"]').forEach(el => el.style.overflowX = 'visible');
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+    await new Promise(r => setTimeout(r, 150));
 
-    const canvas = await html2canvas(printArea, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      width:  printArea.scrollWidth,
-      height: printArea.scrollHeight,
-      windowWidth: printArea.scrollWidth
-    });
+    const canvas = await html2canvas(clone, { scale: 2, useCORS: true, logging: false, width: 800, windowWidth: 800 });
+    document.body.removeChild(wrapper);
 
-    noPrint.forEach(el => { el.style.display = el._prevDisplay || ''; });
-    overflowEls.forEach(el => { el.style.overflowX = el._prevOverflowX || ''; });
-
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const imgData  = canvas.toDataURL('image/jpeg', 0.92);
     const { jsPDF } = window.jspdf;
     const pdf      = new jsPDF('p', 'mm', 'a4');
     const pageW    = pdf.internal.pageSize.getWidth();
     const pageH    = pdf.internal.pageSize.getHeight();
-    const imgH     = canvas.height * (pageW / canvas.width);
-    let heightLeft = imgH;
-    let position   = 0;
-    pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
-    heightLeft -= pageH;
-    while (heightLeft > 0) {
-      position -= pageH;
+    const margin   = 10; // mm each side
+    const contentW = pageW - margin * 2;
+    const imgH     = canvas.height * (contentW / canvas.width);
+
+    pdf.addImage(imgData, 'JPEG', margin, margin, contentW, imgH);
+    let shown = pageH - margin;
+    while (shown < imgH) {
       pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
-      heightLeft -= pageH;
+      pdf.addImage(imgData, 'JPEG', margin, margin - shown, contentW, imgH);
+      shown += pageH;
     }
     quotePdfBase64 = pdf.output('datauristring').split(',')[1];
   } catch (e) {
