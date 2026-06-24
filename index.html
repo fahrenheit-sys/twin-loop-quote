@@ -162,21 +162,23 @@ function showContactPopup(msg) {
   document.getElementById('contact-modal').style.display = 'flex';
 }
 
-// Binding setup fee (per quantity). EVA: flat $35. PUR: tiered by book qty. Case: flat $50.
+// Binding setup fee (per quantity).
 function bindSetupFee(q) {
   if (isPerfect()) {
-    if (state.bindSubtype === 'Regular (EVA) Glue') return 35;
+    if (state.bindSubtype === 'Regular (EVA) Glue') return 45;
     if (state.bindSubtype === 'Robust (PUR) Glue') {
-      if (q < 50)  return 50;
-      if (q < 75)  return 75;
-      if (q < 100) return 100;
-      if (q < 150) return 150;
+      if (q <= 50)  return 50;
+      if (q <= 75)  return 75;
+      if (q <= 100) return 100;
+      if (q <= 150) return 150;
       return 200;
     }
     return 0;
   }
   if (isCase()) return 50;
-  if (state.bindCategory === 'Plastic Spiral') return 35;
+  if (['Wire Binding', 'Plastic Spiral', 'Plastic Comb'].includes(state.bindCategory)) {
+    return q <= 500 ? 45 : 40;
+  }
   return 0;
 }
 
@@ -492,6 +494,15 @@ function runCalculations() {
   }
 
   // Per-qty totals
+  let bindMin = 50;
+  if ((isPerfect() && state.bindSubtype === 'Regular (EVA) Glue') ||
+      ['Wire Binding', 'Plastic Spiral', 'Plastic Comb'].includes(state.bindCategory)) {
+    bindMin = 95;
+  } else if (isCase()) {
+    bindMin = 125;
+  }
+  const minCharge = bindMin + (celloSetupFee > 0 ? 50 : 0);
+
   const totals = state.qtys.map((q, idx) => {
     const disc        = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length - 1];
     const perUnitSum  = activeItems.reduce((s, i) => s + i.unit, 0);
@@ -499,9 +510,12 @@ function runCalculations() {
     const subtotal    = (perUnitSum * q) + collCost + celloSetupFee + bindSetups[idx];
     const discRate    = disc.Rate;
     const discAmt     = subtotal * (discRate / 100);
-    const afterDisc   = Math.max(50, subtotal - discAmt);
+    const preMin      = subtotal - discAmt;
+    const afterDisc   = Math.max(minCharge, preMin);
+    const minApplied  = preMin < minCharge;
+    const minUplift   = minApplied ? afterDisc - preMin : 0;
     const gst         = afterDisc * 0.10;
-    return { qty: q, discountPct: discRate, discountAmt: discAmt, afterDisc, gst, totalIncGST: afterDisc + gst };
+    return { qty: q, discountPct: discRate, discountAmt: discAmt, afterDisc, minApplied, minUplift, gst, totalIncGST: afterDisc + gst };
   });
 
   // Stash for sendQuote()
@@ -553,6 +567,12 @@ function runCalculations() {
       ${totals.map(t => `<td style="text-align:right;padding:6px 8px;">-${t.discountPct}%&nbsp;(-$${fmt(t.discountAmt)})</td>`).join('')}
     </tr>`;
 
+  const minChargeRow = totals.some(t => t.minApplied) ? `
+    <tr style="font-style:italic;color:#777;border-top:1px solid #eee;">
+      <td style="padding:6px 8px;">Minimum charge applied</td>
+      ${totals.map(t => `<td style="text-align:right;padding:6px 8px;">${t.minApplied ? '+$' + fmt(t.minUplift) : '—'}</td>`).join('')}
+    </tr>` : '';
+
   const totalRow = `
     <tr style="font-weight:bold;font-size:14px;background:#000;color:#fff;border-top:2px solid #000;">
       <td style="padding:12px;">TOTAL (INC GST)</td>
@@ -591,6 +611,7 @@ function runCalculations() {
       ${setupRow}
       ${bindSetupRow}
       ${discountRow}
+      ${minChargeRow}
       ${totalRow}
     </table>
     </div>
