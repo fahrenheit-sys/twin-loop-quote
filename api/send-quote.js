@@ -151,7 +151,7 @@ module.exports = async function handler(req, res) {
   }
 
   const template  = getBindingTemplate(state.bindCategory, state.bindSubtype);
-  const emailHtml = buildEmailHtml(state, computed, template);
+  const emailHtml = buildEmailHtml(state, template);
 
   // ── 3. Build attachments ──────────────────────────────────────────────────
   const attachments = [];
@@ -211,77 +211,17 @@ module.exports = async function handler(req, res) {
   return res.status(200).json({ success: true });
 };
 
-// ── Email HTML builder ────────────────────────────────────────────────────────
-function buildEmailHtml(state, computed, template) {
-  const fmt   = v => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+// ── Email HTML builder — template text only, quote is in the attached PDF ─────
+function buildEmailHtml(state, template) {
   const today = new Date();
-  const valid = new Date(); valid.setDate(today.getDate() + 30);
   const fDate = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
-
-  const { items, totals, collatingLines = [], celloSetupFee, bindSetups = [] } = computed;
-  const leafCount    = parseFloat(state.leafCount || 0);
   const customerName = state.customerName || 'there';
-
-  const qtyHeaders = state.qtys.map(q =>
-    `<th style="text-align:right;padding:8px 14px;background:#f2f2f2;border-bottom:2px solid #000;">Qty&nbsp;${q}</th>`
-  ).join('');
-
-  const itemRows = items.map(i => `
-    <tr>
-      <td style="padding:6px 14px;border-bottom:1px solid #f0f0f0;">${i.label}</td>
-      ${state.qtys.map(q => `<td style="text-align:right;padding:6px 14px;border-bottom:1px solid #f0f0f0;">$${fmt(i.unit * q)}</td>`).join('')}
-    </tr>`).join('');
-
-  const collRow = collatingLines.map(l => `
-    <tr>
-      <td style="padding:6px 14px;border-bottom:1px solid #f0f0f0;">${l.label}</td>
-      ${l.costs.map(c => `<td style="text-align:right;padding:6px 14px;border-bottom:1px solid #f0f0f0;">$${fmt(c)}</td>`).join('')}
-    </tr>`).join('');
-
-  const setupRow = celloSetupFee > 0 ? `
-    <tr>
-      <td style="padding:6px 14px;border-bottom:1px solid #f0f0f0;">Glazing Setup Fee</td>
-      ${state.qtys.map(() => `<td style="text-align:right;padding:6px 14px;border-bottom:1px solid #f0f0f0;">$${fmt(celloSetupFee)}</td>`).join('')}
-    </tr>` : '';
-
-  const bindSetupRow = bindSetups.some(f => f > 0) ? `
-    <tr>
-      <td style="padding:6px 14px;border-bottom:1px solid #f0f0f0;">Binding Setup Fee</td>
-      ${bindSetups.map(f => `<td style="text-align:right;padding:6px 14px;border-bottom:1px solid #f0f0f0;">$${fmt(f)}</td>`).join('')}
-    </tr>` : '';
-
-  const discountRow = `
-    <tr>
-      <td style="padding:6px 14px;color:#c0392b;font-weight:bold;">Volume Discount</td>
-      ${totals.map(t => `<td style="text-align:right;padding:6px 14px;color:#c0392b;font-weight:bold;">-${t.discountPct}% (-$${fmt(t.discountAmt)})</td>`).join('')}
-    </tr>`;
-
-  const minChargeRow = totals.some(t => t.minApplied) ? `
-    <tr>
-      <td style="padding:6px 14px;font-style:italic;color:#777;">Minimum charge applied</td>
-      ${totals.map(t => `<td style="text-align:right;padding:6px 14px;font-style:italic;color:#777;">${t.minApplied ? '+$' + fmt(t.minUplift) : '&mdash;'}</td>`).join('')}
-    </tr>` : '';
-
-  const totalRow = `
-    <tr style="background:#000;color:#fff;">
-      <td style="padding:12px 14px;font-weight:bold;font-size:15px;">TOTAL (INC GST)</td>
-      ${totals.map(t => `<td style="text-align:right;padding:12px 14px;font-weight:bold;font-size:15px;">$${fmt(t.totalIncGST)}</td>`).join('')}
-    </tr>`;
-
-  const leafStackMM = (leafCount * parseFloat(state.leafMM || 0)).toFixed(2);
-  const techDetails = [
-    `${leafCount} leaves &times; ${state.leafMM}mm (${state.leafGSMValue}gsm) = <strong>${leafStackMM}mm</strong>`,
-    state.frontCoverName !== 'None' ? `Front cover (${state.frontCoverName}): <strong>${state.frontCoverMM}mm</strong>` : null,
-    state.backCoverName  !== 'None' ? `Back cover (${state.backCoverName}): <strong>${state.backCoverMM}mm</strong>`   : null,
-    `Spine total: <strong>${parseFloat(computed.spineMM).toFixed(2)}mm</strong>${computed.wireSize ? ` &rarr; Wire: <strong>${computed.wireSize}</strong>` : ''}`
-  ].filter(Boolean).join(' &nbsp;|&nbsp; ');
 
   return `<!DOCTYPE html>
 <html>
 <body style="margin:0;padding:20px;background:#f5f5f5;font-family:'Segoe UI',Arial,sans-serif;">
 <div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.12);">
 
-  <!-- Header -->
   <div style="padding:24px 32px;border-bottom:2px solid #000;display:flex;justify-content:space-between;align-items:center;">
     <img src="https://www.twinloop.com.au/wp-content/uploads/2021/06/twinloop-header-logo-blueonwhite-@2x.png" height="45" alt="Twin Loop Binding">
     <div style="text-align:right;">
@@ -292,47 +232,20 @@ function buildEmailHtml(state, computed, template) {
     </div>
   </div>
 
-  <!-- Greeting + specs -->
   <div style="padding:24px 32px;border-bottom:1px solid #eee;font-size:13px;line-height:1.8;color:#333;">
     <p style="margin:0 0 16px;">Dear ${customerName},</p>
     <p style="margin:0 0 16px;">${template.greeting}</p>
-
     ${template.specsHtml ? `
-    <p style="margin:20px 0 8px;font-weight:bold;font-size:13px;">Our specifications</p>
+    <p style="margin:20px 0 8px;font-weight:bold;">Our specifications</p>
     <div style="color:#444;line-height:1.8;">${template.specsHtml}</div>` : ''}
   </div>
 
-  <!-- Pricing table -->
-  <div style="padding:24px 32px;">
-    <table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <tr style="border-bottom:2px solid #000;">
-        <th style="text-align:left;padding:8px 14px;background:#f2f2f2;">Description</th>
-        ${qtyHeaders}
-      </tr>
-      ${itemRows}
-      ${collRow}
-      ${setupRow}
-      ${bindSetupRow}
-      ${discountRow}
-      ${minChargeRow}
-      ${totalRow}
-    </table>
-  </div>
-
-  <!-- Technical details -->
-  <div style="padding:16px 32px;background:#f4f4f4;border-top:1px solid #ddd;font-size:12px;color:#555;">
-    <strong>Technical Details:</strong><br>
-    <span style="line-height:2;">${techDetails}</span>
-  </div>
-
-  <!-- Fast tracking -->
-  <div style="padding:24px 32px;border-top:1px solid #eee;font-size:13px;line-height:1.8;color:#333;">
+  <div style="padding:24px 32px;border-bottom:1px solid #eee;font-size:13px;line-height:1.8;color:#333;">
     <p style="margin:0 0 8px;font-weight:bold;">Fast Tracking Your Job</p>
     <div>${template.fastTrackHtml}</div>
   </div>
 
-  <!-- Validity + sign-off -->
-  <div style="padding:0 32px 24px;font-size:13px;line-height:1.8;color:#333;">
+  <div style="padding:24px 32px;font-size:13px;line-height:1.8;color:#333;">
     <p style="margin:0 0 16px;">This quote is valid for 30 days. If you have any questions regarding our quote, please contact us either by email <a href="mailto:quotes@twinloop.com.au" style="color:#000;">quotes@twinloop.com.au</a> or by phone on <a href="tel:1300657850" style="color:#000;">1300 657 850</a>.</p>
     <p style="margin:0 0 4px;">Thanking you,</p>
     <p style="margin:0 0 4px;font-weight:bold;">Kind regards,</p>
@@ -340,25 +253,18 @@ function buildEmailHtml(state, computed, template) {
     <p style="margin:0;"><a href="mailto:wayne@twinloop.com.au" style="color:#000;">wayne@twinloop.com.au</a></p>
   </div>
 
-  <!-- Contact footer -->
   <div style="padding:20px 32px;background:#f8f9fa;border-top:2px solid #000;font-size:12px;color:#555;">
     <table style="width:100%;border-collapse:collapse;">
       <tr>
-        <td style="padding:4px 0;vertical-align:top;width:40%;">
-          <strong>Twin Loop Binding Pty Ltd</strong><br>
-          15 Hugh Street, Belmore 2192
-        </td>
+        <td style="padding:4px 0;vertical-align:top;width:40%;"><strong>Twin Loop Binding Pty Ltd</strong><br>15 Hugh Street, Belmore 2192</td>
         <td style="padding:4px 0;vertical-align:top;">
           P &nbsp;<a href="tel:1300657850" style="color:#000;">1300 657 850</a><br>
           <a href="mailto:quotes@twinloop.com.au" style="color:#000;">quotes@twinloop.com.au</a><br>
           <a href="https://www.twinloop.com.au" style="color:#000;">www.twinloop.com.au</a>
         </td>
-        <td style="padding:4px 0;vertical-align:top;text-align:right;color:#999;font-size:11px;">
-          ABN 78 082 258 035
-        </td>
+        <td style="padding:4px 0;vertical-align:top;text-align:right;color:#999;font-size:11px;">ABN 78 082 258 035</td>
       </tr>
     </table>
-    <p style="margin:10px 0 0;font-size:11px;color:#aaa;border-top:1px solid #ddd;padding-top:10px;">All prices in AUD and include GST. Quote valid for 30 days from date of issue.</p>
   </div>
 
 </div>

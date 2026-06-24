@@ -585,7 +585,7 @@ function runCalculations() {
   <div id="print-area" style="text-align:left;font-size:11px;">
 
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid #000;">
-      <img src="https://www.twinloop.com.au/wp-content/uploads/2021/06/twinloop-header-logo-blueonwhite-@2x.png" style="height:45px;" alt="Twin Loop">
+      <img src="/logo.png" style="height:45px;" alt="Twin Loop">
       <div style="text-align:right;line-height:1.7;">
         <div style="font-size:20px;font-weight:bold;letter-spacing:2px;">QUOTE</div>
         <div><b>Quote #:</b> ${state.quoteNumber}</div>
@@ -666,13 +666,24 @@ async function sendQuote() {
   let quotePdfBase64 = null;
   try {
     const printArea = document.getElementById('print-area');
-    // Temporarily hide buttons so they don't appear in the PDF
+
+    // Hide buttons and remove overflow clipping so the full width renders
     const noPrint = printArea.querySelectorAll('.no-print');
     noPrint.forEach(el => { el._prevDisplay = el.style.display; el.style.display = 'none'; });
+    const overflowEls = printArea.querySelectorAll('[style*="overflow-x"]');
+    overflowEls.forEach(el => { el._prevOverflowX = el.style.overflowX; el.style.overflowX = 'visible'; });
 
-    const canvas = await html2canvas(printArea, { scale: 2, useCORS: true, logging: false });
+    const canvas = await html2canvas(printArea, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      width:  printArea.scrollWidth,
+      height: printArea.scrollHeight,
+      windowWidth: printArea.scrollWidth
+    });
 
     noPrint.forEach(el => { el.style.display = el._prevDisplay || ''; });
+    overflowEls.forEach(el => { el.style.overflowX = el._prevOverflowX || ''; });
 
     const imgData = canvas.toDataURL('image/jpeg', 0.92);
     const { jsPDF } = window.jspdf;
