@@ -13,6 +13,8 @@
   }
   #quote-app-root * { box-sizing: border-box; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -657,14 +659,49 @@ async function sendQuote() {
     return;
   }
 
-  btn.textContent = 'Sending…';
+  btn.textContent = 'Generating PDF…';
   btn.disabled = true;
+
+  // Generate PDF from the rendered quote panel
+  let quotePdfBase64 = null;
+  try {
+    const printArea = document.getElementById('print-area');
+    // Temporarily hide buttons so they don't appear in the PDF
+    const noPrint = printArea.querySelectorAll('.no-print');
+    noPrint.forEach(el => { el._prevDisplay = el.style.display; el.style.display = 'none'; });
+
+    const canvas = await html2canvas(printArea, { scale: 2, useCORS: true, logging: false });
+
+    noPrint.forEach(el => { el.style.display = el._prevDisplay || ''; });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const { jsPDF } = window.jspdf;
+    const pdf      = new jsPDF('p', 'mm', 'a4');
+    const pageW    = pdf.internal.pageSize.getWidth();
+    const pageH    = pdf.internal.pageSize.getHeight();
+    const imgH     = canvas.height * (pageW / canvas.width);
+    let heightLeft = imgH;
+    let position   = 0;
+    pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
+    heightLeft -= pageH;
+    while (heightLeft > 0) {
+      position -= pageH;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
+      heightLeft -= pageH;
+    }
+    quotePdfBase64 = pdf.output('datauristring').split(',')[1];
+  } catch (e) {
+    console.warn('PDF generation failed, sending without attachment:', e);
+  }
+
+  btn.textContent = 'Sending…';
 
   try {
     const res = await fetch('/api/send-quote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state, computed: window._quoteComputed })
+      body: JSON.stringify({ state, computed: window._quoteComputed, quotePdfBase64 })
     });
     const data = await res.json();
     if (data.success) {

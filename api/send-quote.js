@@ -1,13 +1,80 @@
+// ── Binding info PDF URLs ─────────────────────────────────────────────────────
+// Fill in the URL for each binding type once the client provides them.
+const BINDING_INFO_PDF_URLS = {
+  'Prefect Binding': null, // TODO: e.g. 'https://twinloop.com.au/pdfs/perfect-binding.pdf'
+  'Case Binding':    null, // TODO
+  'Wire Binding':    null, // TODO
+  'Plastic Spiral':  null, // TODO
+  'Plastic Comb':    null, // TODO
+};
+
+// ── Per-binding email template ────────────────────────────────────────────────
+function getBindingTemplate(bindCategory, bindSubtype) {
+  if (bindCategory === 'Prefect Binding') {
+    if (bindSubtype === 'Robust (PUR) Glue') {
+      return {
+        subjectType: 'PUR Perfect Binding',
+        intro: `Thank you for your quote request. Please find your <strong>PUR Perfect Binding</strong> estimate below.<br><br>
+PUR glue offers superior strength and flexibility compared to standard EVA — ideal for high-use documents, training manuals, and anything that needs to withstand repeated opening and closing. Books will lie flat and remain intact even under heavy use.`,
+        note: 'PUR binding takes slightly longer to cure than EVA but delivers a significantly stronger result. Recommended for documents over 200 pages or with heavy cover stock.'
+      };
+    }
+    return {
+      subjectType: 'Perfect Binding',
+      intro: `Thank you for your quote request. Please find your <strong>Perfect Binding</strong> estimate below.<br><br>
+Perfect binding produces a professional flat spine and is ideal for books, catalogues, reports, and magazines. It's a cost-effective way to present your document with a polished, retail-quality finish.`,
+      note: 'EVA perfect binding is suitable for standard use documents kept in normal temperature conditions.'
+    };
+  }
+  if (bindCategory === 'Case Binding') {
+    return {
+      subjectType: 'Case Binding (Hardcover)',
+      intro: `Thank you for your quote request. Please find your <strong>Case Binding (Hardcover)</strong> estimate below.<br><br>
+Case binding is our premium option, producing a durable hardcover book built to last. It's perfect for reference manuals, annual reports, commemorative publications, and anything that needs to make a lasting impression.`,
+      note: 'Case bound books are hand-finished to the highest standard. Please allow additional production time compared to softcover binding options.'
+    };
+  }
+  if (bindCategory === 'Wire Binding') {
+    return {
+      subjectType: 'Wire Binding',
+      intro: `Thank you for your quote request. Please find your <strong>Wire (Twin-Loop) Binding</strong> estimate below.<br><br>
+Wire binding allows documents to open completely flat and rotate a full 360° — perfect for workbooks, training manuals, calendars, and presentations that need to stay open hands-free on a desk or lectern.`,
+      note: 'Wire bound documents are available in black or silver wire. Please let us know your preference when placing your order.'
+    };
+  }
+  if (bindCategory === 'Plastic Spiral') {
+    return {
+      subjectType: 'Plastic Spiral Binding',
+      intro: `Thank you for your quote request. Please find your <strong>Plastic Spiral (Coil) Binding</strong> estimate below.<br><br>
+Plastic coil binding offers a flexible, durable finish and is available in a wide range of colours to match your brand. Documents open completely flat, making it a popular choice for workbooks, planners, and training materials.`,
+      note: 'Plastic coil is available in a large range of standard colours. Contact us to discuss colour options for your project.'
+    };
+  }
+  if (bindCategory === 'Plastic Comb') {
+    return {
+      subjectType: 'Plastic Comb Binding',
+      intro: `Thank you for your quote request. Please find your <strong>Plastic Comb Binding</strong> estimate below.<br><br>
+Plastic comb binding is an economical and practical choice for internal documents, reports, and training materials. One of its key advantages is that documents can be easily updated — the comb can be re-opened to add, remove, or replace pages.`,
+      note: 'Comb bound documents are easy to update in-house, making them ideal for documents that are revised regularly.'
+    };
+  }
+  return {
+    subjectType: 'Binding',
+    intro: 'Thank you for your quote request. Please find your estimate below.',
+    note: ''
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
   if (!body || !body.state) return res.status(400).json({ error: 'Missing data' });
 
-  const { state, computed } = body;
-  const SB_URL   = process.env.SUPABASE_URL;
-  const SB_KEY   = process.env.SUPABASE_SERVICE_KEY;
-  const RESEND    = process.env.RESEND_API_KEY;
+  const { state, computed, quotePdfBase64 } = body;
+  const SB_URL  = process.env.SUPABASE_URL;
+  const SB_KEY  = process.env.SUPABASE_SERVICE_KEY;
+  const RESEND  = process.env.RESEND_API_KEY;
 
   // ── 1. Save quote to Supabase ─────────────────────────────────────────────
   try {
@@ -42,29 +109,55 @@ module.exports = async function handler(req, res) {
     });
   } catch (e) {
     console.error('Supabase save failed:', e.message);
-    // Continue — still send the email even if DB save fails
   }
 
-  // ── 2. Send email via Resend ──────────────────────────────────────────────
+  // ── 2. Build email ────────────────────────────────────────────────────────
   if (!state.customerEmail) {
     return res.status(200).json({ success: true, note: 'No email address — quote saved only' });
   }
 
-  const emailHtml = buildEmailHtml(state, computed);
+  const template = getBindingTemplate(state.bindCategory, state.bindSubtype);
+  const emailHtml = buildEmailHtml(state, computed, template);
 
-  // Send quote to customer
+  // ── 3. Build attachments ──────────────────────────────────────────────────
+  const attachments = [];
+
+  if (quotePdfBase64) {
+    attachments.push({
+      filename: `Quote-${state.quoteNumber}.pdf`,
+      content:  quotePdfBase64
+    });
+  }
+
+  const infoUrl = BINDING_INFO_PDF_URLS[state.bindCategory];
+  if (infoUrl) {
+    try {
+      const resp = await fetch(infoUrl);
+      if (resp.ok) {
+        const buf  = await resp.arrayBuffer();
+        const b64  = Buffer.from(buf).toString('base64');
+        const name = state.bindCategory.replace(/[^a-z0-9]/gi, '-') + '-Info.pdf';
+        attachments.push({ filename: name, content: b64 });
+      }
+    } catch (e) {
+      console.error('Failed to fetch binding info PDF:', e.message);
+    }
+  }
+
+  const emailPayload = (to, subject) => ({
+    from:    'Twin Loop Binding <webquote@quote.twinloop.online>',
+    to,
+    subject,
+    html:    emailHtml,
+    ...(attachments.length > 0 ? { attachments } : {})
+  });
+
+  // ── 4. Send to customer ───────────────────────────────────────────────────
+  const customerSubject = `Your ${template.subjectType} Quote ${state.quoteNumber} — Twin Loop Binding`;
   const emailRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${RESEND}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      from:    'Twin Loop Binding <webquote@quote.twinloop.online>',
-      to:      [state.customerEmail],
-      subject: `Your Quote ${state.quoteNumber} — Twin Loop Binding`,
-      html:    emailHtml
-    })
+    headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(emailPayload([state.customerEmail], customerSubject))
   });
 
   if (!emailRes.ok) {
@@ -73,27 +166,20 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Email failed', detail: err });
   }
 
-  // Send internal notification to Twin Loop
+  // ── 5. Internal copy ──────────────────────────────────────────────────────
+  const internalSubject = `New Quote ${state.quoteNumber} — ${state.customerName || 'Unknown'}${state.customerCompany ? ' (' + state.customerCompany + ')' : ''} — ${template.subjectType}`;
   await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${RESEND}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      from:    'Quote Tool <webquote@quote.twinloop.online>',
-      to:      ['quotes@twinloop.com.au'],
-      subject: `New Quote ${state.quoteNumber} — ${state.customerName || 'Unknown'} ${state.customerCompany ? '(' + state.customerCompany + ')' : ''}`.trim(),
-      html:    emailHtml
-    })
+    headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(emailPayload(['quotes@twinloop.com.au'], internalSubject))
   });
 
   return res.status(200).json({ success: true });
 };
 
 // ── Email HTML builder ────────────────────────────────────────────────────────
-function buildEmailHtml(state, computed) {
-  const fmt  = v => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+function buildEmailHtml(state, computed, template) {
+  const fmt   = v => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
   const today = new Date();
   const valid = new Date(); valid.setDate(today.getDate() + 30);
   const fDate = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -135,6 +221,12 @@ function buildEmailHtml(state, computed) {
       ${totals.map(t => `<td style="text-align:right;padding:6px 14px;color:#c0392b;font-weight:bold;">-${t.discountPct}% (-$${fmt(t.discountAmt)})</td>`).join('')}
     </tr>`;
 
+  const minChargeRow = totals.some(t => t.minApplied) ? `
+    <tr>
+      <td style="padding:6px 14px;font-style:italic;color:#777;">Minimum charge applied</td>
+      ${totals.map(t => `<td style="text-align:right;padding:6px 14px;font-style:italic;color:#777;">${t.minApplied ? '+$' + fmt(t.minUplift) : '—'}</td>`).join('')}
+    </tr>` : '';
+
   const totalRow = `
     <tr style="background:#000;color:#fff;">
       <td style="padding:12px 14px;font-weight:bold;font-size:15px;">TOTAL (INC GST)</td>
@@ -170,6 +262,10 @@ function buildEmailHtml(state, computed) {
     <p style="margin:8px 0 0;font-size:12px;color:#666;">Date: ${fDate(today)} &nbsp;&bull;&nbsp; Valid until: ${fDate(valid)}</p>
   </div>
 
+  <div style="padding:20px 32px;border-bottom:1px solid #eee;font-size:13px;line-height:1.7;color:#333;">
+    ${template.intro}
+  </div>
+
   <div style="padding:24px 32px;">
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <tr style="border-bottom:2px solid #000;">
@@ -181,6 +277,7 @@ function buildEmailHtml(state, computed) {
       ${setupRow}
       ${bindSetupRow}
       ${discountRow}
+      ${minChargeRow}
       ${totalRow}
     </table>
   </div>
@@ -189,6 +286,11 @@ function buildEmailHtml(state, computed) {
     <strong>Technical Details:</strong><br>
     <span style="line-height:2;">${techDetails}</span>
   </div>
+
+  ${template.note ? `
+  <div style="padding:14px 32px;background:#fffbf0;border-top:1px solid #f0e0a0;font-size:12px;color:#7a6000;">
+    <strong>Note:</strong> ${template.note}
+  </div>` : ''}
 
   <div style="padding:20px 32px;border-top:1px solid #eee;font-size:12px;color:#666;">
     <table style="width:100%;border-collapse:collapse;">
@@ -208,7 +310,7 @@ function buildEmailHtml(state, computed) {
         </td>
       </tr>
     </table>
-    <p style="margin:12px 0 0;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:10px;">All prices in AUD and include GST. Quote valid for 30 days from date of issue. Minimum job cost $50.</p>
+    <p style="margin:12px 0 0;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:10px;">All prices in AUD and include GST. Quote valid for 30 days from date of issue.</p>
   </div>
 
 </div>
