@@ -169,18 +169,16 @@ function bindSetupFee(q) {
   if (isPerfect()) {
     if (state.bindSubtype === 'Regular (EVA) Glue') return 45;
     if (state.bindSubtype === 'Robust (PUR) Glue') {
-      if (q <= 50)  return 50;
-      if (q <= 75)  return 75;
-      if (q <= 100) return 100;
-      if (q <= 150) return 150;
+      if (q < 50)  return 50;
+      if (q < 75)  return 75;
+      if (q < 100) return 100;
+      if (q < 150) return 150;
       return 200;
     }
     return 0;
   }
   if (isCase()) return 50;
-  if (['Wire Binding', 'Plastic Spiral', 'Plastic Comb'].includes(state.bindCategory)) {
-    return q <= 500 ? 45 : 40;
-  }
+  if (['Wire Binding', 'Plastic Spiral', 'Plastic Comb'].includes(state.bindCategory)) return 45;
   return 0;
 }
 
@@ -506,7 +504,9 @@ function runCalculations() {
   const minCharge = bindMin + (celloSetupFee > 0 ? 50 : 0);
 
   const totals = state.qtys.map((q, idx) => {
-    const disc        = db['volume-discount'].find(t => q >= t.Start && q <= t.End) || db['volume-discount'][db['volume-discount'].length - 1];
+    const discKey     = state.bindCategory === 'Case Binding' ? 'Case Binding' : isPerfect() ? 'Prefect Binding' : 'general';
+    const discTable   = db['volume-discount'][discKey] || db['volume-discount']['general'] || [];
+    const disc        = discTable.find(t => q >= t.Start && q <= t.End) || discTable[discTable.length - 1] || { Rate: 0 };
     const perUnitSum  = activeItems.reduce((s, i) => s + i.unit, 0);
     const collCost    = collatingLines.reduce((s, l) => s + l.costs[idx], 0);
     const subtotal    = (perUnitSum * q) + collCost + celloSetupFee + bindSetups[idx];
@@ -757,10 +757,14 @@ async function loadPricing() {
       .sort((a, b) => parseFloat(a.min_mm) - parseFloat(b.min_mm))
       .map(r => ({ Min: parseFloat(r.min_mm), Max: parseFloat(r.max_mm), Wire: r.wire }));
 
-    // Volume discount — rate stored as decimal (0.05), convert to % (5)
-    db['volume-discount'] = discRows
-      .sort((a, b) => a.start_qty - b.start_qty)
-      .map(r => ({ Start: r.start_qty, End: r.end_qty, Rate: parseFloat(r.rate) * 100 }));
+    // Volume discount — grouped by binding_type; rate stored as decimal (0.05), converted to % (5)
+    db['volume-discount'] = {};
+    discRows.forEach(r => {
+      const type = r.binding_type || 'general';
+      if (!db['volume-discount'][type]) db['volume-discount'][type] = [];
+      db['volume-discount'][type].push({ Start: r.start_qty, End: r.end_qty, Rate: parseFloat(r.rate) * 100 });
+    });
+    Object.values(db['volume-discount']).forEach(arr => arr.sort((a, b) => a.Start - b.Start));
 
     // Cello glazing options
     db['cello-glazing'] = celloRows.map(r => ({
