@@ -1,5 +1,7 @@
 // ── Binding info PDF URLs ─────────────────────────────────────────────────────
 // Each binding type can have one or more setup guide PDFs attached to quotes.
+const WIRE_BINDING_GUIDELINES_PDF = 'https://twin-loop-quote.vercel.app/wire-binding-guidelines.pdf';
+
 const BINDING_INFO_PDF_URLS = {
   'Prefect Binding': [
     'https://www.twinloop.com.au/wp-content/uploads/2021/06/Perfect-Binding-Layout-Guidlines_Jul-21.pdf',
@@ -7,12 +9,9 @@ const BINDING_INFO_PDF_URLS = {
   'Case Binding': [
     'https://www.twinloop.com.au/wp-content/uploads/2021/06/Case-Binding-Guidlines-March-2025-v2.pdf',
   ],
-  'Wire Binding': [
-    'https://www.twinloop.com.au/wp-content/uploads/2021/06/Half-Canadian-Layout-Guidlines_July-21.pdf',
-    'https://www.twinloop.com.au/wp-content/uploads/2021/06/Set-Up-Help_Full-Canadian-Layout-Guidelines.pdf',
-  ],
-  'Plastic Spiral': [], // TODO: add URL when available
-  'Plastic Comb':   [], // TODO: add URL when available
+  'Wire Binding':   [WIRE_BINDING_GUIDELINES_PDF],
+  'Plastic Spiral': [WIRE_BINDING_GUIDELINES_PDF],
+  'Plastic Comb':   [WIRE_BINDING_GUIDELINES_PDF],
 };
 
 const FAST_TRACK_DEFAULT = `<p>Should you wish to proceed with the quote please send us a purchase order with the quote number. (Samples are always helpful especially if collating is involved.) If your job is time critical please email us as soon as possible so we can prepare ourselves and allocate production time to help meet your deadline.</p>`;

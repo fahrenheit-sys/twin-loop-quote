@@ -255,14 +255,18 @@ function render() {
       return true;
     });
     extras.push({ name: 'Collating' });
+    const CASE_CONTACT_EXTRAS = ['Ribbons', 'Foiling', 'DeBossing'];
     extras.forEach(item => {
       const isSel = state.selectedExtras.some(e => e.name === item.name);
       const btn = createBtn(item.name, () => {
-        if (isSel) state.selectedExtras = state.selectedExtras.filter(e => e.name !== item.name);
-        else {
+        if (isSel) {
+          state.selectedExtras = state.selectedExtras.filter(e => e.name !== item.name);
+        } else if (isCase() && CASE_CONTACT_EXTRAS.includes(item.name)) {
+          // Ribbons, Foiling, DeBossing for Case Binding must be quoted manually — do not add to selection.
+          showContactPopup(CASE_EXTRA_MSG);
+          return;
+        } else {
           state.selectedExtras.push(item);
-          // Case binding extras (foiling, debossing, ribbons) are non-standard — quoted manually.
-          if (isCase() && item.name !== 'Collating') showContactPopup(CASE_EXTRA_MSG);
         }
         render();
       });
@@ -279,7 +283,8 @@ function render() {
       h.innerText = 'Collating options (select all that apply):';
       h.style.cssText = 'font-weight:bold;font-size:13px;margin-bottom:2px;';
       panel.appendChild(h);
-      (db['collating-options'] || []).forEach(opt => {
+      const collatingOpts = (db['collating-options'] || []).filter(opt => isCase() ? opt.key === 'text' : true);
+      collatingOpts.forEach(opt => {
         const cur = state.collating[opt.key];
         const on  = opt.needsQty ? (parseFloat(cur || 0) > 0) : !!cur;
         const row = document.createElement('div');
@@ -494,7 +499,7 @@ function runCalculations() {
   }
 
   // Per-qty totals
-  let bindMin = 50;
+  let bindMin = 100; // PUR Perfect Binding minimum
   if ((isPerfect() && state.bindSubtype === 'Regular (EVA) Glue') ||
       ['Wire Binding', 'Plastic Spiral', 'Plastic Comb'].includes(state.bindCategory)) {
     bindMin = 95;
