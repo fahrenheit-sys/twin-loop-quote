@@ -144,7 +144,7 @@ const steps = [
   { id: 'leafCount',       q: 'How many internal sheets per book?',       type: 'number' },
   { id: 'gsm',             q: 'What paper weight (GSM)?',                 type: 'button',    source: 'gsm' },
   { id: 'coverDashboard',  q: 'Select your covers:',                      type: 'cover-dash', condition: () => !isPerfect() && !isCase() },
-  { id: 'celloType',       q: 'Apply glazing or lamination to covers?',   type: 'button',    source: 'celloTypes', condition: () => isPerfect() },
+  { id: 'celloType',       q: 'Apply glazing or lamination to covers?',   type: 'button',    source: 'celloTypes', condition: () => isPerfect() || isCase() },
   { id: 'extras',          q: 'Any production extras? (select all that apply)', type: 'multiselect' },
   { id: 'customerReference', q: 'Estimate Request Number (optional):', type: 'text-input', placeholder: 'e.g. 12345', required: false },
   { id: 'customerName',    q: "Almost done! What's your name?",           type: 'text-input', placeholder: 'e.g. John Smith',     required: true  },
@@ -283,7 +283,7 @@ function render() {
       h.innerText = 'Collating options (select all that apply):';
       h.style.cssText = 'font-weight:bold;font-size:13px;margin-bottom:2px;';
       panel.appendChild(h);
-      const collatingOpts = (db['collating-options'] || []).filter(opt => isCase() ? opt.key === 'text' : true);
+      const collatingOpts = (db['collating-options'] || []).filter(opt => (isCase() || isPerfect()) ? opt.key === 'text' : true);
       collatingOpts.forEach(opt => {
         const cur = state.collating[opt.key];
         const on  = opt.needsQty ? (parseFloat(cur || 0) > 0) : !!cur;
@@ -340,7 +340,8 @@ function getOptions(current) {
     // Perfect binding: double-sided gloss/matt/soft touch is not offered.
     const glazing = (db['cello-glazing'] || []).filter(c => !(isPerfect() && /double sided/i.test(c.label)));
     return [
-      { label: 'No Glazing', val: { label: 'No', cost: 0, setup: 0 } },
+      { label: 'No Celloglazing', val: { label: 'No Celloglazing', cost: 0, setup: 0 } },
+      { label: 'Supplied Celloed', val: { label: 'Supplied Celloed', cost: 0, setup: 0 } },
       ...glazing.map(c => ({ label: c.label, val: c }))
     ];
   }
@@ -441,6 +442,9 @@ function runCalculations() {
   const wireSize = impRow.Wire;
   // The "Wire:" bracket is only shown to the customer for actual wire-type bindings, not perfect/case.
   const showWire = !(isPerfect() || isCase());
+  // Plastic Spiral: wire-size bracket is a pricing lookup, not a real "wire" — keep it out of the
+  // customer-facing description line, it still appears under Technical Details below.
+  const showWireInDesc = showWire && state.bindCategory !== 'Plastic Spiral';
 
   // Binding unit cost — nested as leaf size > thickness bracket for all categories.
   let bindUnit = 0;
@@ -458,7 +462,7 @@ function runCalculations() {
     (state.bindSubtype && state.bindSubtype !== '-') ? state.bindSubtype : null,
     state.leafSize,
     leafCount + ' leaves',
-    showWire ? 'Wire: ' + wireSize : null
+    showWireInDesc ? 'Wire: ' + wireSize : null
   ].filter(Boolean).join(' — ');
 
   let items = [
@@ -540,7 +544,7 @@ function runCalculations() {
     `<tr><td style="padding:3px 8px;color:#666;">Internal leaves:</td><td style="padding:3px 8px;">${leafCount} &times; ${state.leafMM}mm&nbsp;(${state.leafGSMValue}gsm) = <b>${leafStackMM}mm</b></td></tr>`,
     state.frontCoverName !== 'None' ? `<tr><td style="padding:3px 8px;color:#666;">Front cover (${state.frontCoverName}):</td><td style="padding:3px 8px;"><b>${state.frontCoverMM}mm</b></td></tr>` : '',
     state.backCoverName  !== 'None' ? `<tr><td style="padding:3px 8px;color:#666;">Back cover (${state.backCoverName}):</td><td style="padding:3px 8px;"><b>${state.backCoverMM}mm</b></td></tr>`   : '',
-    `<tr style="border-top:1px solid #ccc;"><td style="padding:5px 8px;font-weight:bold;color:#333;">Spine total:</td><td style="padding:5px 8px;font-weight:bold;">${spineMM.toFixed(2)}mm${showWire ? ' &rarr; Wire size: <b>' + wireSize + '</b>' : ''}</td></tr>`
+    `<tr style="border-top:1px solid #ccc;"><td style="padding:5px 8px;font-weight:bold;color:#333;">This estimate is based on a thickness of:</td><td style="padding:5px 8px;font-weight:bold;">${spineMM.toFixed(2)}mm${showWire ? ' (Wire size: <b>' + wireSize + '</b>)' : ''}</td></tr>`
   ].join('');
 
   // ── Pricing table rows ─────────────────────────────────────────────────────
