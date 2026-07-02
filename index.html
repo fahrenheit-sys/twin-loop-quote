@@ -178,7 +178,7 @@ function bindSetupFee(q) {
     return 0;
   }
   if (isCase()) return 50;
-  if (['Wire Binding', 'Plastic Spiral', 'Plastic Comb'].includes(state.bindCategory)) return 45;
+  if (['Wire Binding', 'Plastic Spiral', 'Comb'].includes(state.bindCategory)) return 45;
   return 0;
 }
 
@@ -523,7 +523,7 @@ function runCalculations() {
   // Per-qty totals
   let bindMin = 100; // PUR Perfect Binding minimum
   if ((isPerfect() && state.bindSubtype === 'Regular (EVA) Glue') ||
-      ['Wire Binding', 'Plastic Spiral', 'Plastic Comb'].includes(state.bindCategory)) {
+      ['Wire Binding', 'Plastic Spiral', 'Comb'].includes(state.bindCategory)) {
     bindMin = 95;
   } else if (isCase()) {
     bindMin = 125;

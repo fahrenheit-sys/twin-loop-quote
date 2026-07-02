@@ -12,7 +12,7 @@ const BINDING_INFO_PDF_URLS = {
   ],
   'Wire Binding':   [WIRE_BINDING_GUIDELINES_PDF],
   'Plastic Spiral': [PLASTIC_SPIRAL_BINDING_GUIDELINES_PDF],
-  'Plastic Comb':   [WIRE_BINDING_GUIDELINES_PDF],
+  'Comb':           [WIRE_BINDING_GUIDELINES_PDF],
 };
 
 const FAST_TRACK_DEFAULT = `<p>Should you wish to proceed with the quote please send us a purchase order with the quote number. (Samples are always helpful especially if collating is involved.) If your job is time critical please email us as soon as possible so we can prepare ourselves and allocate production time to help meet your deadline.</p>`;
@@ -81,10 +81,10 @@ function getBindingTemplate(bindCategory, bindSubtype) {
     };
   }
 
-  if (bindCategory === 'Plastic Comb') {
+  if (bindCategory === 'Comb') {
     return {
-      subjectType: 'Plastic Comb Binding',
-      greeting: 'Please find our quote for Plastic Comb Binding. Should you wish to proceed with the quote please supply the quote number with your purchase order.',
+      subjectType: 'Comb Binding',
+      greeting: 'Please find our quote for Comb Binding. Should you wish to proceed with the quote please supply the quote number with your purchase order.',
       specsHtml: `
         <p>We only require divider sheets if we are required to add PVC fronts or backing boards. Please remember to keep your image at least 10mm away from where we will be punching.</p>`,
       fastTrackHtml: FAST_TRACK_DEFAULT,
