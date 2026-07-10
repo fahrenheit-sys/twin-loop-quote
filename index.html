@@ -129,7 +129,7 @@ function initDefaults() {
     backCoverName:  'None', backCoverMM:  0, backCoverCost:  0, backSource:  'Twin Loop', backCollated:  'Yes',
     celloType: 'No', celloCost: 0, celloSetup: 0,
     collating: {},
-    selectedExtras: [], bindCategory: '', bindSubtype: '', wireColour: '', history: [],
+    selectedExtras: [], bindCategory: '', bindSubtype: '', wireColour: '', spiralColour: '', history: [],
     hasTabs: '', tabCount: 0, tabGSMValue: 0, tabMM: 0, tentStandThickness: 0,
     customerName: '', customerCompany: '', customerEmail: '', customerReference: '',
     quoteNumber: generateQuoteNumber()
@@ -141,6 +141,7 @@ function initDefaults() {
 const steps = [
   { id: 'bindCategory',    q: 'What type of binding do you need?',       type: 'button',    source: 'bindCategory' },
   { id: 'bindSubtype',     q: 'Select style:',                            type: 'button',    source: 'bindSubtype' },
+  { id: 'spiralColour',    q: 'Select spiral colour:',                    type: 'button',    condition: () => state.bindCategory === 'Plastic Spiral' },
   { id: 'tentStandThickness', q: 'What is the thickness of the tent stand (mm)?', type: 'number', condition: () => state.bindCategory === 'Wire Binding' && state.bindSubtype === 'Calendar with tent stand / flip chart' },
   { id: 'qtys',            q: 'How many copies do you need?',             type: 'multi-qty' },
   { id: 'leafSize',        q: 'What is your document size?',              type: 'button',    source: 'leafSizes' },
@@ -150,7 +151,7 @@ const steps = [
   { id: 'tabGSM',          q: 'What GSM are the tabs?',                   type: 'button',    source: 'gsm', condition: () => state.bindCategory === 'Wire Binding' && state.hasTabs === 'Yes' },
   { id: 'gsm',             q: 'What paper weight (GSM)?',                 type: 'button',    source: 'gsm' },
   { id: 'coverDashboard',  q: 'Select your covers:',                      type: 'cover-dash', condition: () => !isPerfect() && !isCase() },
-  { id: 'celloType',       q: 'Apply glazing or lamination to covers?',   type: 'button',    source: 'celloTypes', condition: () => isPerfect() || isCase() },
+  { id: 'celloType',       q: 'Apply celloglazing to covers?',           type: 'button',    source: 'celloTypes', condition: () => isPerfect() || isCase() },
   { id: 'extras',          q: 'Any production extras? (select all that apply)', type: 'multiselect' },
   { id: 'customerReference', q: 'Estimate Request Number (optional):', type: 'text-input', placeholder: 'e.g. 12345', required: false },
   { id: 'customerName',    q: "Almost done! What's your name?",           type: 'text-input', placeholder: 'e.g. John Smith',     required: true  },
@@ -239,6 +240,8 @@ function render() {
     bSpace.style.display = 'flex';
     if (current.id === 'bindSubtype' && state.bindCategory === 'Wire Binding') {
       renderWireStyleAndColour(current, bSpace);
+    } else if (current.id === 'spiralColour') {
+      renderSpiralColour(current, bSpace);
     } else {
       getOptions(current).forEach(opt => bSpace.appendChild(createBtn(opt.label, () => handleInput(opt.val))));
       if (current.id === 'leafSize') {
@@ -367,6 +370,7 @@ function render() {
 // ── Wire Binding style + colour (style selection doesn't auto-advance — a colour
 // must be chosen first, so this uses the same select-then-Continue pattern as extras).
 const WIRE_COLOURS = ['Black', 'White', 'To be advised'];
+const SPIRAL_COLOURS = ['Black', 'White', 'Clear', 'To Be Advised'];
 function renderWireStyleAndColour(current, bSpace) {
   const options = getOptions(current);
   options.forEach(opt => {
@@ -400,6 +404,28 @@ function renderWireStyleAndColour(current, bSpace) {
   }
 }
 
+function renderSpiralColour(current, bSpace) {
+  if (!state.spiralColour) state.spiralColour = SPIRAL_COLOURS[0];
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'flex-basis:100%;width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;';
+  const lbl = document.createElement('label');
+  lbl.innerText = 'Spiral colour:';
+  lbl.style.cssText = 'font-size:13px;font-weight:bold;';
+  const sel = document.createElement('select');
+  sel.style.cssText = 'padding:8px;border:1px solid #000;border-radius:4px;font-family:inherit;width:100%;max-width:240px;';
+  SPIRAL_COLOURS.forEach(c => sel.add(new Option(c, c)));
+  sel.value = state.spiralColour;
+  sel.onchange = () => { state.spiralColour = sel.value; };
+  const note = document.createElement('p');
+  note.style.cssText = 'font-size:11px;color:#666;margin:0;text-align:center;';
+  note.innerText = 'Other colours available on special request.';
+  wrap.appendChild(lbl);
+  wrap.appendChild(sel);
+  wrap.appendChild(note);
+  bSpace.appendChild(wrap);
+  bSpace.appendChild(createBtn('Continue →', () => { state.history.push(state.step); state.step++; render(); }, '200px'));
+}
+
 // ── Options builder ───────────────────────────────────────────────────────────
 function getOptions(current) {
   if (current.source === 'bindCategory') {
@@ -416,8 +442,8 @@ function getOptions(current) {
     return db.gsm.map(i => ({ label: i.GSM + ' gsm', val: i }));
   }
   if (current.source === 'celloTypes') {
-    // Perfect binding: double-sided gloss/matt/soft touch is not offered.
-    const glazing = (db['cello-glazing'] || []).filter(c => !(isPerfect() && /double sided/i.test(c.label)));
+    // Perfect binding and Case binding: double-sided gloss/matt/soft touch is not offered.
+    const glazing = (db['cello-glazing'] || []).filter(c => !((isPerfect() || isCase()) && /double sided/i.test(c.label)));
     return [
       { label: 'No Celloglazing', val: { label: 'No Celloglazing', cost: 0, setup: 0 } },
       { label: 'Supplied Celloed', val: { label: 'Supplied Celloed', cost: 0, setup: 0 } },
@@ -575,6 +601,7 @@ function runCalculations() {
     leafCount + ' leaves' + (suppliedCollated ? ' (text supplied collated)' : ''),
     showWireInDesc ? wireSizeLabel + ': ' + wireSize : null,
     isWire && state.wireColour ? 'Colour: ' + state.wireColour : null,
+    state.bindCategory === 'Plastic Spiral' && state.spiralColour ? 'Colour: ' + state.spiralColour : null,
     isTentStand ? 'Stands supplied flat and scored' : null
   ].filter(Boolean).join(' — ');
 
@@ -582,7 +609,7 @@ function runCalculations() {
     { label: bindLabel,                                                                                           unit: bindUnit,                                                                  active: true },
     { label: 'Front Cover: ' + state.frontCoverName + ' (' + state.frontSource + ')',                            unit: (state.frontSource === 'Twin Loop' ? state.frontCoverCost : 0) + fSurcharge, active: state.frontCoverName !== 'None' },
     { label: 'Back Cover: '  + state.backCoverName  + ' (' + state.backSource  + ')',                            unit: (state.backSource  === 'Twin Loop' ? state.backCoverCost  : 0) + bSurcharge, active: state.backCoverName  !== 'None' },
-    { label: 'Glazing: ' + state.celloType,                                                                      unit: state.celloCost,                                                           active: state.celloCost > 0 }
+    { label: 'Celloglazing: ' + state.celloType,                                                                  unit: state.celloCost,                                                           active: state.celloCost > 0 }
   ];
 
   state.selectedExtras.forEach(e => {
@@ -651,15 +678,14 @@ function runCalculations() {
   // Hide the top header logo — the quote body already has the logo
   document.getElementById('header-logo').style.display = 'none';
 
-  // ── Spine breakdown helper ─────────────────────────────────────────────────
-  const leafStackMM = (leafCount * state.leafMM).toFixed(2);
+  // ── Technical Details ──────────────────────────────────────────────────────
+  // Internal-leaves / cover thickness maths are intentionally left out here — that
+  // detail is already captured in the description line above.
   const techRows = [
-    `<tr><td style="padding:3px 8px;color:#666;">Internal leaves:</td><td style="padding:3px 8px;">${leafCount} &times; ${state.leafMM}mm&nbsp;(${state.leafGSMValue}gsm) = <b>${leafStackMM}mm</b></td></tr>`,
-    state.frontCoverName !== 'None' ? `<tr><td style="padding:3px 8px;color:#666;">Front cover (${state.frontCoverName}):</td><td style="padding:3px 8px;"><b>${state.frontCoverMM}mm</b></td></tr>` : '',
-    state.backCoverName  !== 'None' ? `<tr><td style="padding:3px 8px;color:#666;">Back cover (${state.backCoverName}):</td><td style="padding:3px 8px;"><b>${state.backCoverMM}mm</b></td></tr>`   : '',
-    tabsMM > 0 ? `<tr><td style="padding:3px 8px;color:#666;">Tabs:</td><td style="padding:3px 8px;">${state.tabCount} &times; ${state.tabMM}mm&nbsp;(${state.tabGSMValue}gsm) = <b>${tabsMM.toFixed(2)}mm</b></td></tr>` : '',
-    tentMM > 0 ? `<tr><td style="padding:3px 8px;color:#666;">Tent stand allowance:</td><td style="padding:3px 8px;">${state.tentStandThickness}mm &times; 4 = <b>${tentMM.toFixed(2)}mm</b></td></tr>` : '',
-    `<tr style="border-top:1px solid #ccc;"><td style="padding:5px 8px;font-weight:bold;color:#333;">This estimate is based on a thickness of:</td><td style="padding:5px 8px;font-weight:bold;">${spineMM.toFixed(2)}mm${showWire ? ' (' + wireSizeLabel + ': <b>' + wireSize + '</b>)' : ''}</td></tr>`,
+    isCase()    ? `<tr><td colspan="2" style="padding:4px 8px;">Actual cover to be supplied on 170 or 180gsm with a minimum bleed of 15mm, all covers should be celloglazed, Twin Loop Binding to supply end sheets — if you wish to supply, please ensure the end sheets are not on a glossy stock.</td></tr>` : '',
+    isPerfect() ? `<tr><td colspan="2" style="padding:4px 8px;">We recommend you use a 300gsm stock for the covers and customers are asked not to pre trim the covers. If printing the covers 2-up, please make sure there is a 20mm double cut between the covers, and the top and bottom covers still have a 5mm bleed.</td></tr>` : '',
+    state.celloCost > 0 ? `<tr><td colspan="2" style="padding:4px 8px;">There are no minimum charges with celloglazing.</td></tr>` : '',
+    collatingOn ? `<tr><td colspan="2" style="padding:4px 8px;">Please supply a sample with the job.</td></tr>` : '',
     `<tr><td colspan="2" style="padding:3px 8px;font-size:10px;color:#888;">This estimate is based on work supplied 1-up. If jobs are supplied 2-up or 4-up, additional guillotining charges may apply.</td></tr>`,
     oversized ? `<tr><td colspan="2" style="padding:8px;background:#fff3cd;border:1px solid #f0ad4e;color:#8a6d3b;font-weight:bold;">&#9888; Maximum size exceeded: based on the information provided, this job's spine (${spineMM.toFixed(2)}mm) is over the maximum thickness of ${maxSpineMM}mm we can bind for ${state.bindCategory}. This estimate has been calculated at our maximum size — please contact us to confirm before proceeding.</td></tr>` : ''
   ].join('');
@@ -679,7 +705,7 @@ function runCalculations() {
 
   const setupRow = celloSetupFee > 0 ? `
     <tr style="border-bottom:1px solid #f0f0f0;">
-      <td style="padding:6px 8px;">Glazing Setup Fee</td>
+      <td style="padding:6px 8px;">Celloglazing Setup Fee</td>
       ${state.qtys.map(() => `<td style="text-align:right;padding:6px 8px;">$${fmt(celloSetupFee)}</td>`).join('')}
     </tr>` : '';
 
