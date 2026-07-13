@@ -163,6 +163,23 @@ const steps = [
 function isPerfect() { return state.bindCategory === 'Prefect Binding'; }
 function isCase()    { return state.bindCategory === 'Case Binding';    }
 
+// ── Special customer pricing ────────────────────────────────────────────────
+// Company name is free text, so match on full name or short alias (case-insensitive,
+// whole-word for aliases so e.g. "ive" doesn't match inside an unrelated word).
+const SPECIAL_CUSTOMER_NAMES = {
+  IPS:  'Innovative Print Solutions (IPS)',
+  IVE:  'IVE Print Group (IVE)',
+  CMYK: 'CMYK Hub (CMYK)'
+};
+function matchSpecialCustomer() {
+  const raw = (state.customerCompany || '').trim().toLowerCase();
+  if (!raw) return null;
+  if (/innovative print solutions/.test(raw) || /\bips\b/.test(raw))  return 'IPS';
+  if (/ive print group/.test(raw)            || /\bive\b/.test(raw))  return 'IVE';
+  if (/cmyk hub/.test(raw)                   || /\bcmyk\b/.test(raw)) return 'CMYK';
+  return null;
+}
+
 // ── Contact popup (non-standard items are quoted manually) ─────────────────────
 const CONTACT_EMAIL = 'quotes@twinloop.com.au';
 const CASE_EXTRA_MSG = `Contact Twin Loop on <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> and provide details such as the size of foiling or debossing required.`;
@@ -176,6 +193,7 @@ function bindSetupFee(q) {
   if (isPerfect()) {
     if (state.bindSubtype === 'Regular (EVA) Glue') return 45;
     if (state.bindSubtype === 'Robust (PUR) Glue') {
+      if (matchSpecialCustomer() === 'IPS') return 100; // IPS: flat PUR setup fee regardless of qty
       if (q <= 50)  return 50;
       if (q <= 75)  return 75;
       if (q <= 100) return 100;
@@ -552,7 +570,11 @@ function runCalculations() {
   const spineMM = (leafCount * state.leafMM) + state.frontCoverMM + state.backCoverMM + tabsMM + tentMM;
 
   // Thickness bracket lookup — every binding type is priced by spine-thickness bracket.
-  const impRow = db.imperial.find(r => spineMM <= r.Max) || db.imperial[db.imperial.length - 1];
+  // Perfect Binding uses a lower first-bracket cutoff (3.0mm instead of 6.4mm): any spine over
+  // 3mm prices at the next bracket up (3.01–8.0mm), rather than staying at the thinnest bracket
+  // all the way to 6.4mm. Wire/Spiral/Comb/Case keep the standard imperial wire-gauge brackets.
+  const bracketTable = isPerfect() ? db.imperial.map((r, i) => i === 0 ? { ...r, Max: 3.0 } : r) : db.imperial;
+  const impRow = bracketTable.find(r => spineMM <= r.Max) || bracketTable[bracketTable.length - 1];
   let wireSize = impRow.Wire;
   // The "Wire:" bracket is only shown to the customer for actual wire-type bindings, not perfect/case.
   const showWire = !(isPerfect() || isCase());
@@ -652,6 +674,11 @@ function runCalculations() {
   }
   const minCharge = bindMin + (celloSetupFee > 0 ? 50 : 0);
 
+  // IVE and CMYK get an additional 10% off the whole quote, on top of the volume discount —
+  // shown as its own "Additional special discount for:" line, not compounded into it.
+  const specialCustomer = matchSpecialCustomer();
+  const specialDiscRate = (specialCustomer === 'IVE' || specialCustomer === 'CMYK') ? 10 : 0;
+
   const totals = state.qtys.map((q, idx) => {
     const discKey     = state.bindCategory === 'Case Binding' ? 'Case Binding' : isPerfect() ? 'Prefect Binding' : 'general';
     const discTable   = db['volume-discount'][discKey] || db['volume-discount']['general'] || [];
@@ -661,16 +688,17 @@ function runCalculations() {
     const subtotal    = (perUnitSum * q) + collCost + celloSetupFee + bindSetups[idx];
     const discRate    = disc.Rate;
     const discAmt     = subtotal * (discRate / 100);
-    const preMin      = subtotal - discAmt;
+    const specialDiscAmt = subtotal * (specialDiscRate / 100);
+    const preMin      = subtotal - discAmt - specialDiscAmt;
     const afterDisc   = Math.max(minCharge, preMin);
     const minApplied  = preMin < minCharge;
     const minUplift   = minApplied ? afterDisc - preMin : 0;
     const gst         = afterDisc * 0.10;
-    return { qty: q, discountPct: discRate, discountAmt: discAmt, afterDisc, minApplied, minUplift, gst, totalIncGST: afterDisc + gst };
+    return { qty: q, discountPct: discRate, discountAmt: discAmt, specialDiscAmt, afterDisc, minApplied, minUplift, gst, totalIncGST: afterDisc + gst };
   });
 
   // Stash for sendQuote()
-  window._quoteComputed = { spineMM, wireSize: showWire ? wireSize : null, oversized, maxSpineMM, items: activeItems, totals, collatingLines, celloSetupFee, bindSetups };
+  window._quoteComputed = { spineMM, wireSize: showWire ? wireSize : null, oversized, maxSpineMM, items: activeItems, totals, collatingLines, celloSetupFee, bindSetups, specialCustomer, specialDiscRate };
 
   const today = new Date();
   const valid = new Date(); valid.setDate(today.getDate() + 30);
@@ -721,6 +749,12 @@ function runCalculations() {
       <td style="padding:6px 8px;">Volume Discount</td>
       ${totals.map(t => `<td style="text-align:right;padding:6px 8px;">-${t.discountPct}%&nbsp;(-$${fmt(t.discountAmt)})</td>`).join('')}
     </tr>`;
+
+  const specialDiscRow = specialDiscRate > 0 ? `
+    <tr style="font-weight:bold;color:#c0392b;">
+      <td style="padding:6px 8px;">Additional special discount for: ${SPECIAL_CUSTOMER_NAMES[specialCustomer]}</td>
+      ${totals.map(t => `<td style="text-align:right;padding:6px 8px;">-${specialDiscRate}%&nbsp;(-$${fmt(t.specialDiscAmt)})</td>`).join('')}
+    </tr>` : '';
 
   const minChargeRow = totals.some(t => t.minApplied) ? `
     <tr style="font-style:italic;color:#777;border-top:1px solid #eee;">
@@ -776,6 +810,7 @@ function runCalculations() {
       ${setupRow}
       ${bindSetupRow}
       ${discountRow}
+      ${specialDiscRow}
       ${minChargeRow}
       ${subtotalRow}
       ${totalRow}
