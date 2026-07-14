@@ -719,30 +719,26 @@ function runCalculations() {
   ].join('');
 
   // ── Pricing table rows ─────────────────────────────────────────────────────
-  const itemRows = activeItems.map(i => `
+  const rowHtml = (label, values) => `
     <tr style="border-bottom:1px solid #f0f0f0;">
-      <td style="padding:6px 8px;">${i.label}</td>
-      ${state.qtys.map(q => `<td style="text-align:right;padding:6px 8px;">$${fmt(i.unit * q)}</td>`).join('')}
-    </tr>`).join('');
-
-  const collRow = collatingLines.map(l => `
-    <tr style="border-bottom:1px solid #f0f0f0;">
-      <td style="padding:6px 8px;">${l.label}</td>
-      ${l.costs.map(c => `<td style="text-align:right;padding:6px 8px;">$${fmt(c)}</td>`).join('')}
-    </tr>`).join('');
-
-  const setupRow = celloSetupFee > 0 ? `
-    <tr style="border-bottom:1px solid #f0f0f0;">
-      <td style="padding:6px 8px;">Celloglazing Setup Fee</td>
-      ${state.qtys.map(() => `<td style="text-align:right;padding:6px 8px;">$${fmt(celloSetupFee)}</td>`).join('')}
-    </tr>` : '';
+      <td style="padding:6px 8px;">${label}</td>
+      ${values.map(v => `<td style="text-align:right;padding:6px 8px;">$${fmt(v)}</td>`).join('')}
+    </tr>`;
 
   const bindSetupLabel = (isPerfect() || isCase()) ? 'Binding Setup and Make Ready Fee' : 'Binding Setup Fee';
-  const bindSetupRow = bindSetups.some(f => f > 0) ? `
-    <tr style="border-bottom:1px solid #f0f0f0;">
-      <td style="padding:6px 8px;">${bindSetupLabel}</td>
-      ${bindSetups.map(f => `<td style="text-align:right;padding:6px 8px;">$${fmt(f)}</td>`).join('')}
-    </tr>` : '';
+  const bindSetupRow = bindSetups.some(f => f > 0) ? rowHtml(bindSetupLabel, bindSetups) : '';
+  const setupRow = celloSetupFee > 0 ? rowHtml('Celloglazing Setup Fee', state.qtys.map(() => celloSetupFee)) : '';
+
+  // Each item's own set-up fee is shown directly below it (Binding Setup under the binding
+  // line, Celloglazing Setup under Celloglazing), rather than grouped at the bottom.
+  const itemRows = activeItems.map(i => {
+    const row = rowHtml(i.label, state.qtys.map(q => i.unit * q));
+    if (i === items[0]) return row + bindSetupRow;
+    if (i.label.startsWith('Celloglazing:')) return row + setupRow;
+    return row;
+  }).join('');
+
+  const collRow = collatingLines.map(l => rowHtml(l.label, l.costs)).join('');
 
   const discountRow = `
     <tr style="font-weight:bold;color:#c0392b;border-top:1px solid #ddd;">
@@ -807,8 +803,6 @@ function runCalculations() {
       </tr>
       ${itemRows}
       ${collRow}
-      ${setupRow}
-      ${bindSetupRow}
       ${discountRow}
       ${specialDiscRow}
       ${minChargeRow}
