@@ -113,7 +113,7 @@ module.exports = async function handler(req, res) {
   const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
   if (!body || !body.state) return res.status(400).json({ error: 'Missing data' });
 
-  const { state, computed, quotePdfBase64 } = body;
+  const { state, computed, quotePdfBase64, internalOnly } = body;
   const SB_URL  = process.env.SUPABASE_URL;
   const SB_KEY  = process.env.SUPABASE_SERVICE_KEY;
   const RESEND  = process.env.RESEND_API_KEY;
@@ -154,10 +154,9 @@ module.exports = async function handler(req, res) {
   }
 
   // ── 2. Build email ────────────────────────────────────────────────────────
-  if (!state.customerEmail) {
-    return res.status(200).json({ success: true, note: 'No email address — quote saved only' });
-  }
-
+  // Note: the internal copy (step 5 below) always fires regardless of customerEmail —
+  // Twin Loop should get a record of every quote generated, including PDF downloads
+  // where the customer never asked for their own emailed copy.
   const template  = getBindingTemplate(state.bindCategory, state.bindSubtype);
   const emailHtml = buildEmailHtml(state, template);
 
@@ -195,17 +194,21 @@ module.exports = async function handler(req, res) {
   });
 
   // ── 4. Send to customer ───────────────────────────────────────────────────
-  const customerSubject = `Your ${template.subjectType} Quote ${state.quoteNumber} — Twin Loop Binding`;
-  const emailRes = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(emailPayload([state.customerEmail], customerSubject))
-  });
+  // Skipped for internalOnly requests (e.g. the customer clicked "Download PDF" rather
+  // than "Email Me This Quote") — only Twin Loop's internal copy is sent in that case.
+  if (!internalOnly && state.customerEmail) {
+    const customerSubject = `Your ${template.subjectType} Quote ${state.quoteNumber} — Twin Loop Binding`;
+    const emailRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(emailPayload([state.customerEmail], customerSubject))
+    });
 
-  if (!emailRes.ok) {
-    const err = await emailRes.json().catch(() => ({}));
-    console.error('Resend error:', err);
-    return res.status(500).json({ error: 'Email failed', detail: err });
+    if (!emailRes.ok) {
+      const err = await emailRes.json().catch(() => ({}));
+      console.error('Resend error:', err);
+      return res.status(500).json({ error: 'Email failed', detail: err });
+    }
   }
 
   // ── 5. Internal copy ──────────────────────────────────────────────────────

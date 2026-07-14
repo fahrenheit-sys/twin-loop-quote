@@ -125,6 +125,7 @@ function generateQuoteNumber() {
 function initDefaults() {
   state = {
     step: 0, qtys: [], leafSize: '', leafCount: 0, leafMM: 0, leafGSMValue: 0,
+    thicknessMethod: '', bookThicknessMM: 0,
     frontCoverName: 'None', frontCoverMM: 0, frontCoverCost: 0, frontSource: 'Twin Loop', frontCollated: 'Yes',
     backCoverName:  'None', backCoverMM:  0, backCoverCost:  0, backSource:  'Twin Loop', backCollated:  'Yes',
     celloType: 'No', celloCost: 0, celloSetup: 0,
@@ -138,6 +139,8 @@ function initDefaults() {
 
 // ── Step definitions ──────────────────────────────────────────────────────────
 // Customer capture is AFTER extras — they are emotionally invested by then.
+const THICKNESS_MEASURED = 'I know the finished thickness (mm)';
+const THICKNESS_SHEETS   = 'Calculate from number of internal sheets';
 const steps = [
   { id: 'bindCategory',    q: 'What type of binding do you need?',       type: 'button',    source: 'bindCategory' },
   { id: 'bindSubtype',     q: 'Select style:',                            type: 'button',    source: 'bindSubtype' },
@@ -145,11 +148,13 @@ const steps = [
   { id: 'tentStandThickness', q: 'What is the thickness of the tent stand (mm)?', type: 'number', condition: () => state.bindCategory === 'Wire Binding' && state.bindSubtype === 'Calendar with tent stand / flip chart' },
   { id: 'qtys',            q: 'How many copies do you need?',             type: 'multi-qty' },
   { id: 'leafSize',        q: 'What is your document size?',              type: 'button',    source: 'leafSizes' },
-  { id: 'leafCount',       q: 'How many internal sheets per book?',       type: 'number' },
+  { id: 'thicknessMethod', q: 'How would you like to provide your book thickness?', type: 'button', options: [THICKNESS_MEASURED, THICKNESS_SHEETS], condition: () => isPerfect() },
+  { id: 'bookThicknessMM', q: 'How thick does your book measure? (mm)',   type: 'number',    condition: () => isPerfect() && state.thicknessMethod === THICKNESS_MEASURED },
+  { id: 'leafCount',       q: 'How many internal sheets per book?',       type: 'number',    condition: () => !(isPerfect() && state.thicknessMethod === THICKNESS_MEASURED) },
   { id: 'hasTabs',         q: 'Any tabs?',                                type: 'button',    options: ['Yes', 'No'], condition: () => state.bindCategory === 'Wire Binding' },
   { id: 'tabCount',        q: 'How many tabs?',                           type: 'number',    condition: () => state.bindCategory === 'Wire Binding' && state.hasTabs === 'Yes' },
   { id: 'tabGSM',          q: 'What GSM are the tabs?',                   type: 'button',    source: 'gsm', condition: () => state.bindCategory === 'Wire Binding' && state.hasTabs === 'Yes' },
-  { id: 'gsm',             q: 'What paper weight (GSM)?',                 type: 'button',    source: 'gsm' },
+  { id: 'gsm',             q: 'What paper weight (GSM)?',                 type: 'button',    source: 'gsm', condition: () => !(isPerfect() && state.thicknessMethod === THICKNESS_MEASURED) },
   { id: 'coverDashboard',  q: 'Select your covers:',                      type: 'cover-dash', condition: () => !isPerfect() && !isCase() },
   { id: 'celloType',       q: 'Apply celloglazing to covers?',           type: 'button',    source: 'celloTypes', condition: () => isPerfect() || isCase() },
   { id: 'extras',          q: 'Any production extras? (select all that apply)', type: 'multiselect' },
@@ -162,6 +167,11 @@ const steps = [
 
 function isPerfect() { return state.bindCategory === 'Prefect Binding'; }
 function isCase()    { return state.bindCategory === 'Case Binding';    }
+
+// The bind category key stored in Supabase / used throughout pricing logic is the
+// (misspelled) 'Prefect Binding' — fixing it there would require a data migration.
+// This maps it to the correct spelling for anything the customer sees.
+function bindCategoryLabel(cat) { return cat === 'Prefect Binding' ? 'Perfect Binding' : cat; }
 
 // ── Special customer pricing ────────────────────────────────────────────────
 // Company name is free text, so match on full name or short alias (case-insensitive,
@@ -368,13 +378,17 @@ function render() {
     const numberLabels = {
       leafCount: 'Sheets:',
       tabCount: 'Number of tabs:',
-      tentStandThickness: 'Thickness (mm):'
+      tentStandThickness: 'Thickness (mm):',
+      bookThicknessMM: 'Thickness (mm):'
     };
     document.getElementById('label-1').innerText = numberLabels[current.id] || 'Quantity:';
     document.getElementById('manual-number').value = state[current.id] || '';
     const numNote = document.getElementById('number-note');
     if (current.id === 'leafCount') {
       numNote.innerText = 'Note: sheets means number of leaves — e.g. a 40pp document is 20 leaves.';
+      numNote.style.display = 'block';
+    } else if (current.id === 'bookThicknessMM') {
+      numNote.innerText = 'Measure the spine of a finished (or similar) book, in millimetres.';
       numNote.style.display = 'block';
     } else {
       numNote.style.display = 'none';
@@ -447,7 +461,7 @@ function renderSpiralColour(current, bSpace) {
 // ── Options builder ───────────────────────────────────────────────────────────
 function getOptions(current) {
   if (current.source === 'bindCategory') {
-    return Object.keys(db['binding-costs']).map(k => ({ label: k, val: k }));
+    return Object.keys(db['binding-costs']).map(k => ({ label: bindCategoryLabel(k), val: k }));
   }
   if (current.source === 'bindSubtype') {
     return Object.keys(db['binding-costs'][state.bindCategory] || {}).map(k => ({ label: k, val: k }));
@@ -560,6 +574,9 @@ function fmtDate(d) {
 
 function runCalculations() {
   const fmt       = v => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+  // Perfect Binding customers can supply the finished book thickness directly instead of
+  // an internal sheet count — when they do, that measurement drives the spine/bracket costing.
+  const isMeasuredThickness = isPerfect() && state.thicknessMethod === THICKNESS_MEASURED;
   const leafCount = parseFloat(state.leafCount || 0);
   const isWire    = state.bindCategory === 'Wire Binding';
   const isTentStand = isWire && state.bindSubtype === 'Calendar with tent stand / flip chart';
@@ -567,7 +584,9 @@ function runCalculations() {
   const tabsMM  = (isWire && state.hasTabs === 'Yes') ? (parseFloat(state.tabCount || 0) * parseFloat(state.tabMM || 0)) : 0;
   // Tent stand / flip chart: stand thickness × 4 is added to the text calculation for wire sizing.
   const tentMM  = isTentStand ? (parseFloat(state.tentStandThickness || 0) * 4) : 0;
-  const spineMM = (leafCount * state.leafMM) + state.frontCoverMM + state.backCoverMM + tabsMM + tentMM;
+  const spineMM = isMeasuredThickness
+    ? parseFloat(state.bookThicknessMM || 0) + state.frontCoverMM + state.backCoverMM
+    : (leafCount * state.leafMM) + state.frontCoverMM + state.backCoverMM + tabsMM + tentMM;
 
   // Thickness bracket lookup — every binding type is priced by spine-thickness bracket.
   // Perfect Binding uses a lower first-bracket cutoff (3.0mm instead of 6.4mm): any spine over
@@ -617,10 +636,12 @@ function runCalculations() {
   // Binding label with full context
   const suppliedCollated = state.selectedExtras.some(e => e.name === 'Supplied Collated');
   const bindLabel = [
-    state.bindCategory,
+    bindCategoryLabel(state.bindCategory),
     (state.bindSubtype && state.bindSubtype !== '-') ? state.bindSubtype : null,
     state.leafSize,
-    leafCount + ' leaves' + (suppliedCollated ? ' (text supplied collated)' : ''),
+    isMeasuredThickness
+      ? ('Measured thickness: ' + parseFloat(state.bookThicknessMM || 0).toFixed(2) + 'mm')
+      : (leafCount + ' leaves' + (suppliedCollated ? ' (text supplied collated)' : '')),
     showWireInDesc ? wireSizeLabel + ': ' + wireSize : null,
     isWire && state.wireColour ? 'Colour: ' + state.wireColour : null,
     state.bindCategory === 'Plastic Spiral' && state.spiralColour ? 'Colour: ' + state.spiralColour : null,
@@ -715,7 +736,7 @@ function runCalculations() {
     state.celloCost > 0 ? `<tr><td colspan="2" style="padding:4px 8px;">There are no minimum charges with celloglazing.</td></tr>` : '',
     collatingOn ? `<tr><td colspan="2" style="padding:4px 8px;">Please supply a sample with the job.</td></tr>` : '',
     `<tr><td colspan="2" style="padding:3px 8px;font-size:10px;color:#888;">This estimate is based on work supplied 1-up. If jobs are supplied 2-up or 4-up, additional guillotining charges may apply.</td></tr>`,
-    oversized ? `<tr><td colspan="2" style="padding:8px;background:#fff3cd;border:1px solid #f0ad4e;color:#8a6d3b;font-weight:bold;">&#9888; Maximum size exceeded: based on the information provided, this job's spine (${spineMM.toFixed(2)}mm) is over the maximum thickness of ${maxSpineMM}mm we can bind for ${state.bindCategory}. This estimate has been calculated at our maximum size — please contact us to confirm before proceeding.</td></tr>` : ''
+    oversized ? `<tr><td colspan="2" style="padding:8px;background:#fff3cd;border:1px solid #f0ad4e;color:#8a6d3b;font-weight:bold;">&#9888; Maximum size exceeded: based on the information provided, this job's spine (${spineMM.toFixed(2)}mm) is over the maximum thickness of ${maxSpineMM}mm we can bind for ${bindCategoryLabel(state.bindCategory)}. This estimate has been calculated at our maximum size — please contact us to confirm before proceeding.</td></tr>` : ''
   ].join('');
 
   // ── Pricing table rows ─────────────────────────────────────────────────────
@@ -828,7 +849,7 @@ function runCalculations() {
       <button id="email-btn" onclick="sendQuote()" style="flex:1;min-width:170px;padding:14px;background:#000;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;font-family:inherit;">
         &#9993;&nbsp; Email Me This Quote
       </button>
-      <button onclick="window.print()" style="flex:1;min-width:130px;padding:14px;background:#fff;color:#000;border:2px solid #000;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;font-family:inherit;">
+      <button onclick="downloadQuote()" style="flex:1;min-width:130px;padding:14px;background:#fff;color:#000;border:2px solid #000;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;font-family:inherit;">
         &#128438;&nbsp; Download PDF
       </button>
       <button onclick="location.reload()" style="flex:1;min-width:130px;padding:14px;background:#fff;color:#000;border:2px solid #000;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;font-family:inherit;">
@@ -840,6 +861,42 @@ function runCalculations() {
 
   document.getElementById('active-question-container').innerHTML = html;
   document.getElementById('input-area').style.display = 'none';
+}
+
+// ── PDF generation (shared by the email flow and the internal copy sent on download) ──
+async function generateQuotePdf() {
+  const printArea = document.getElementById('print-area');
+
+  // Clone into a fixed-width off-screen container for consistent layout
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:#fff;';
+  const clone = printArea.cloneNode(true);
+  clone.querySelectorAll('.no-print').forEach(el => el.style.display = 'none');
+  clone.querySelectorAll('[style*="overflow-x"]').forEach(el => el.style.overflowX = 'visible');
+  wrapper.appendChild(clone);
+  document.body.appendChild(wrapper);
+  await new Promise(r => setTimeout(r, 150));
+
+  const canvas = await html2canvas(clone, { scale: 2, useCORS: true, logging: false, width: 800, windowWidth: 800 });
+  document.body.removeChild(wrapper);
+
+  const imgData  = canvas.toDataURL('image/jpeg', 0.92);
+  const { jsPDF } = window.jspdf;
+  const pdf      = new jsPDF('p', 'mm', 'a4');
+  const pageW    = pdf.internal.pageSize.getWidth();
+  const pageH    = pdf.internal.pageSize.getHeight();
+  const margin   = 10; // mm each side
+  const contentW = pageW - margin * 2;
+  const imgH     = canvas.height * (contentW / canvas.width);
+
+  pdf.addImage(imgData, 'JPEG', margin, margin, contentW, imgH);
+  let shown = pageH - margin;
+  while (shown < imgH) {
+    pdf.addPage();
+    pdf.addImage(imgData, 'JPEG', margin, margin - shown, contentW, imgH);
+    shown += pageH;
+  }
+  return pdf.output('datauristring').split(',')[1];
 }
 
 // ── Send quote to API ─────────────────────────────────────────────────────────
@@ -855,41 +912,9 @@ async function sendQuote() {
   btn.textContent = 'Generating PDF…';
   btn.disabled = true;
 
-  // Generate PDF from the rendered quote panel
   let quotePdfBase64 = null;
   try {
-    const printArea = document.getElementById('print-area');
-
-    // Clone into a fixed-width off-screen container for consistent layout
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:#fff;';
-    const clone = printArea.cloneNode(true);
-    clone.querySelectorAll('.no-print').forEach(el => el.style.display = 'none');
-    clone.querySelectorAll('[style*="overflow-x"]').forEach(el => el.style.overflowX = 'visible');
-    wrapper.appendChild(clone);
-    document.body.appendChild(wrapper);
-    await new Promise(r => setTimeout(r, 150));
-
-    const canvas = await html2canvas(clone, { scale: 2, useCORS: true, logging: false, width: 800, windowWidth: 800 });
-    document.body.removeChild(wrapper);
-
-    const imgData  = canvas.toDataURL('image/jpeg', 0.92);
-    const { jsPDF } = window.jspdf;
-    const pdf      = new jsPDF('p', 'mm', 'a4');
-    const pageW    = pdf.internal.pageSize.getWidth();
-    const pageH    = pdf.internal.pageSize.getHeight();
-    const margin   = 10; // mm each side
-    const contentW = pageW - margin * 2;
-    const imgH     = canvas.height * (contentW / canvas.width);
-
-    pdf.addImage(imgData, 'JPEG', margin, margin, contentW, imgH);
-    let shown = pageH - margin;
-    while (shown < imgH) {
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', margin, margin - shown, contentW, imgH);
-      shown += pageH;
-    }
-    quotePdfBase64 = pdf.output('datauristring').split(',')[1];
+    quotePdfBase64 = await generateQuotePdf();
   } catch (e) {
     console.warn('PDF generation failed, sending without attachment:', e);
   }
@@ -914,6 +939,31 @@ async function sendQuote() {
     btn.style.background = '#c0392b';
     btn.disabled = false;
   }
+}
+
+// ── Download PDF also notifies Twin Loop, even if the customer never clicks
+// "Email Me This Quote" — quotes@twinloop.com.au should get a copy of every estimate
+// generated, not just the ones the customer chooses to email themselves.
+let internalCopySent = false;
+async function sendInternalCopyOnDownload() {
+  if (internalCopySent) return;
+  internalCopySent = true;
+  try {
+    const quotePdfBase64 = await generateQuotePdf();
+    await fetch('/api/send-quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state, computed: window._quoteComputed, quotePdfBase64, internalOnly: true })
+    });
+  } catch (e) {
+    console.warn('Internal copy on download failed:', e);
+    internalCopySent = false;
+  }
+}
+
+function downloadQuote() {
+  sendInternalCopyOnDownload();
+  window.print();
 }
 
 // ── Load pricing from Supabase then start wizard ──────────────────────────────
