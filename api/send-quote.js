@@ -62,9 +62,17 @@ function getBindingTemplate(bindCategory, bindSubtype) {
   }
 
   if (bindCategory === 'Wire Binding') {
+    const WIRE_FINISH_LABELS = {
+      '1/2 Canadian':  '½ Canadian',
+      'Full Canadian': 'Full Canadian',
+    };
+    const finishLabel = WIRE_FINISH_LABELS[bindSubtype];
+    const greeting = finishLabel
+      ? `Please find our quote for Twin Loop Wire Binding with a ${finishLabel} finish.`
+      : 'Please find our quote for Twin Loop Wire Binding.';
     return {
       subjectType: 'Wire Binding',
-      greeting: 'Please find our quote for Twin Loop Wire Binding with a ½ Canadian finish.',
+      greeting,
       specsHtml: `
         <p>We only require divider sheets if we are required to add PVC fronts or backing boards. Covers need to be supplied flat and scored &mdash; please use the attached set up guidelines to ensure the correct size covers are supplied.</p>`,
       fastTrackHtml: FAST_TRACK_DEFAULT,
