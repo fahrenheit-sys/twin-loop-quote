@@ -652,7 +652,7 @@ function runCalculations() {
     { label: bindLabel,                                                                                           unit: bindUnit,                                                                  active: true },
     { label: 'Front Cover: ' + state.frontCoverName + ' (' + state.frontSource + ')',                            unit: (state.frontSource === 'Twin Loop' ? state.frontCoverCost : 0) + fSurcharge, active: state.frontCoverName !== 'None' },
     { label: 'Back Cover: '  + state.backCoverName  + ' (' + state.backSource  + ')',                            unit: (state.backSource  === 'Twin Loop' ? state.backCoverCost  : 0) + bSurcharge, active: state.backCoverName  !== 'None' },
-    { label: 'Celloglazing: ' + state.celloType,                                                                  unit: state.celloCost,                                                           active: state.celloCost > 0 }
+    { label: 'Celloglazing: ' + state.celloType + ' — please make sure covers are supplied SRA3 size',            unit: state.celloCost,                                                           active: state.celloCost > 0 }
   ];
 
   state.selectedExtras.forEach(e => {
@@ -746,7 +746,7 @@ function runCalculations() {
       ${values.map(v => `<td style="text-align:right;padding:6px 8px;">$${fmt(v)}</td>`).join('')}
     </tr>`;
 
-  const bindSetupLabel = (isPerfect() || isCase()) ? 'Binding Setup and Make Ready Fee' : 'Binding Setup Fee';
+  const bindSetupLabel = (isPerfect() || isCase()) ? 'Binding Setup and Make Ready Fee' : 'Punching and Binding Setup Fee';
   const bindSetupRow = bindSetups.some(f => f > 0) ? rowHtml(bindSetupLabel, bindSetups) : '';
   const setupRow = celloSetupFee > 0 ? rowHtml('Celloglazing Setup Fee', state.qtys.map(() => celloSetupFee)) : '';
 
