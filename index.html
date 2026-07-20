@@ -59,6 +59,10 @@
               <option value="Client Supplied">Client Supplied</option>
             </select>
           </div>
+          <div id="f-gsm-wrap" style="display:none;">
+            <label style="font-size:11px;font-weight:bold;">Cover GSM:</label>
+            <select id="f-gsm" style="width:100%;padding:8px;margin-bottom:10px;font-family:inherit;"></select>
+          </div>
           <div id="f-coll-wrap" style="display:none;">
             <label style="font-size:11px;font-weight:bold;">Collated?</label>
             <select id="f-collated" style="width:100%;padding:8px;font-family:inherit;">
@@ -76,6 +80,10 @@
               <option value="Twin Loop">Twin Loop</option>
               <option value="Client Supplied">Client Supplied</option>
             </select>
+          </div>
+          <div id="b-gsm-wrap" style="display:none;">
+            <label style="font-size:11px;font-weight:bold;">Cover GSM:</label>
+            <select id="b-gsm" style="width:100%;padding:8px;margin-bottom:10px;font-family:inherit;"></select>
           </div>
           <div id="b-coll-wrap" style="display:none;">
             <label style="font-size:11px;font-weight:bold;">Collated?</label>
@@ -126,8 +134,8 @@ function initDefaults() {
   state = {
     step: 0, qtys: [], leafSize: '', leafCount: 0, leafMM: 0, leafGSMValue: 0,
     thicknessMethod: '', bookThicknessMM: 0,
-    frontCoverName: 'None', frontCoverMM: 0, frontCoverCost: 0, frontSource: 'Twin Loop', frontCollated: 'Yes',
-    backCoverName:  'None', backCoverMM:  0, backCoverCost:  0, backSource:  'Twin Loop', backCollated:  'Yes',
+    frontCoverName: 'None', frontCoverMM: 0, frontCoverCost: 0, frontCoverGSM: 0, frontSource: 'Twin Loop', frontCollated: 'Yes',
+    backCoverName:  'None', backCoverMM:  0, backCoverCost:  0, backCoverGSM: 0, backSource:  'Twin Loop', backCollated:  'Yes',
     celloType: 'No', celloCost: 0, celloSetup: 0,
     collating: {},
     selectedExtras: [], bindCategory: '', bindSubtype: '', wireColour: '', spiralColour: '', history: [],
@@ -167,6 +175,15 @@ const steps = [
 
 function isPerfect() { return state.bindCategory === 'Prefect Binding'; }
 function isCase()    { return state.bindCategory === 'Case Binding';    }
+
+// "Own Covers" lets the customer supply their own cover stock (Wire/Spiral/Comb only) —
+// they pick the GSM instead of a Twin Loop cover material, and that GSM's caliper (mm)
+// feeds the spine/thickness calculation just like an internal sheet does.
+const OWN_COVERS = 'Own Covers';
+function gsmToMM(g) {
+  const row = (db.gsm || []).find(x => String(x.GSM) === String(g));
+  return row ? parseFloat(row.MM) || 0 : 0;
+}
 
 // The bind category key stored in Supabase / used throughout pricing logic is the
 // (misspelled) 'Prefect Binding' — fixing it there would require a data migration.
@@ -219,12 +236,16 @@ function bindSetupFee(q) {
 
 // ── Cover dashboard UI ────────────────────────────────────────────────────────
 function updateCoverUI() {
-  const ft = document.getElementById('f-type').value;
-  const bt = document.getElementById('b-type').value;
-  document.getElementById('f-src-wrap').style.display  = ft !== 'None' ? 'block' : 'none';
-  document.getElementById('b-src-wrap').style.display  = bt !== 'None' ? 'block' : 'none';
-  document.getElementById('f-coll-wrap').style.display = (document.getElementById('f-source').value === 'Client Supplied' && ft !== 'None') ? 'block' : 'none';
-  document.getElementById('b-coll-wrap').style.display = (document.getElementById('b-source').value === 'Client Supplied' && bt !== 'None') ? 'block' : 'none';
+  ['f', 'b'].forEach(p => {
+    const type = document.getElementById(p + '-type').value;
+    const own  = type === OWN_COVERS;
+    const none = type === 'None';
+    // Own covers are client-supplied by nature: show the GSM picker, hide the supplier dropdown.
+    document.getElementById(p + '-gsm-wrap').style.display = own ? 'block' : 'none';
+    document.getElementById(p + '-src-wrap').style.display = (!none && !own) ? 'block' : 'none';
+    const clientSupplied = own || document.getElementById(p + '-source').value === 'Client Supplied';
+    document.getElementById(p + '-coll-wrap').style.display = (!none && clientSupplied) ? 'block' : 'none';
+  });
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -291,9 +312,17 @@ function render() {
       sel.innerHTML = '';
       sel.add(new Option('None', 'None'));
       Object.keys(db.covers).forEach(k => sel.add(new Option(k, k)));
+      sel.add(new Option(OWN_COVERS, OWN_COVERS));
+    });
+    ['f-gsm', 'b-gsm'].forEach(id => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = '';
+      db.gsm.forEach(g => sel.add(new Option(g.GSM + ' gsm', g.GSM)));
     });
     document.getElementById('f-type').value     = state.frontCoverName || 'None';
     document.getElementById('b-type').value     = state.backCoverName  || 'None';
+    if (state.frontCoverGSM) document.getElementById('f-gsm').value = state.frontCoverGSM;
+    if (state.backCoverGSM)  document.getElementById('b-gsm').value = state.backCoverGSM;
     document.getElementById('f-source').value   = state.frontSource    || 'Twin Loop';
     document.getElementById('b-source').value   = state.backSource     || 'Twin Loop';
     document.getElementById('f-collated').value = state.frontCollated  || 'Yes';
@@ -548,15 +577,21 @@ document.getElementById('submit-number').onclick = () => {
 document.getElementById('submit-covers').onclick = () => {
   const fK = document.getElementById('f-type').value;
   const bK = document.getElementById('b-type').value;
+  const fOwn = fK === OWN_COVERS;
+  const bOwn = bK === OWN_COVERS;
   state.frontCoverName  = fK;
   state.backCoverName   = bK;
-  state.frontCoverCost  = fK !== 'None' ? parseFloat(db.covers[fK]?.[state.leafSize] || 0) : 0;
-  state.backCoverCost   = bK !== 'None' ? parseFloat(db.covers[bK]?.[state.leafSize] || 0) : 0;
-  state.frontCoverMM    = fK !== 'None' ? parseFloat(db.covers[fK]?.mm || 0)               : 0;
-  state.backCoverMM     = bK !== 'None' ? parseFloat(db.covers[bK]?.mm || 0)               : 0;
-  state.frontSource     = document.getElementById('f-source').value;
+  state.frontCoverGSM   = fOwn ? parseFloat(document.getElementById('f-gsm').value) || 0 : 0;
+  state.backCoverGSM    = bOwn ? parseFloat(document.getElementById('b-gsm').value) || 0 : 0;
+  // Own covers are supplied by the client, so Twin Loop charges nothing for the stock;
+  // their thickness comes from the chosen GSM and still feeds the spine calculation below.
+  state.frontCoverCost  = fOwn ? 0 : (fK !== 'None' ? parseFloat(db.covers[fK]?.[state.leafSize] || 0) : 0);
+  state.backCoverCost   = bOwn ? 0 : (bK !== 'None' ? parseFloat(db.covers[bK]?.[state.leafSize] || 0) : 0);
+  state.frontCoverMM    = fOwn ? gsmToMM(state.frontCoverGSM) : (fK !== 'None' ? parseFloat(db.covers[fK]?.mm || 0) : 0);
+  state.backCoverMM     = bOwn ? gsmToMM(state.backCoverGSM)  : (bK !== 'None' ? parseFloat(db.covers[bK]?.mm || 0) : 0);
+  state.frontSource     = fOwn ? 'Client Supplied' : document.getElementById('f-source').value;
   state.frontCollated   = document.getElementById('f-collated').value;
-  state.backSource      = document.getElementById('b-source').value;
+  state.backSource      = bOwn ? 'Client Supplied' : document.getElementById('b-source').value;
   state.backCollated    = document.getElementById('b-collated').value;
   state.history.push(state.step);
   state.step++;
@@ -641,7 +676,9 @@ function runCalculations() {
     state.leafSize,
     isMeasuredThickness
       ? ('Measured thickness: ' + parseFloat(state.bookThicknessMM || 0).toFixed(2) + 'mm')
-      : (leafCount + ' leaves' + (suppliedCollated ? ' (text supplied collated)' : '')),
+      : (leafCount + ' leaves' + (state.leafGSMValue ? ' (' + state.leafGSMValue + 'gsm)' : '') + (suppliedCollated ? ' (text supplied collated)' : '')),
+    (state.frontCoverName !== 'None' && state.frontCoverGSM) ? 'Front cover: ' + state.frontCoverGSM + 'gsm' : null,
+    (state.backCoverName  !== 'None' && state.backCoverGSM)  ? 'Back cover: '  + state.backCoverGSM  + 'gsm' : null,
     showWireInDesc ? wireSizeLabel + ': ' + wireSize : null,
     isWire && state.wireColour ? 'Colour: ' + state.wireColour : null,
     state.bindCategory === 'Plastic Spiral' && state.spiralColour ? 'Colour: ' + state.spiralColour : null,
