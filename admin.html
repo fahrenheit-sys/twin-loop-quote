@@ -74,6 +74,21 @@ td { padding: 11px 14px; vertical-align: middle; }
 .badge-sent     { background: #e8f5e9; color: #2e7d32; }
 .badge-amended  { background: #fff3e0; color: #e65100; }
 .badge-viewed   { background: #e3f2fd; color: #1565c0; }
+.badge-paid     { background: #e8f5e9; color: #2e7d32; }
+.badge-pending  { background: #eee;    color: #777; }
+.badge-fulfilled{ background: #e3f2fd; color: #1565c0; }
+.badge-refunded { background: #fdecea; color: #c0392b; }
+.badge-cancelled{ background: #fdecea; color: #c0392b; }
+
+/* ── Tabs ── */
+#tabs { display: flex; gap: 4px; padding: 14px 28px 0; background: #f0f2f5; }
+.tab { background: none; border: none; padding: 10px 18px; font-size: 14px; font-weight: 600; color: #888; cursor: pointer; border-bottom: 3px solid transparent; }
+.tab:hover { color: #000; }
+.tab.active { color: #000; border-bottom-color: #000; }
+
+/* ── Sales view reuses the toolbar/table look ── */
+.tw-toolbar { padding: 20px 28px 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tw-table { padding: 0 28px 40px; overflow-x: auto; }
 
 /* ── Modal backdrop ── */
 .modal-backdrop {
@@ -155,7 +170,7 @@ td { padding: 11px 14px; vertical-align: middle; }
 <div id="login-wrap">
   <div id="login-card">
     <img src="/logo.png" alt="Twin Loop">
-    <h1>Quote Admin</h1>
+    <h1>Twin Loop Admin</h1>
     <input type="password" id="pwd-input" placeholder="Password" onkeydown="if(event.key==='Enter')login()">
     <button id="login-btn" onclick="login()">Login</button>
     <div id="login-error"></div>
@@ -166,10 +181,16 @@ td { padding: 11px 14px; vertical-align: middle; }
 <div id="app">
   <header>
     <img src="/logo.png" alt="Twin Loop">
-    <span class="title">QUOTE ADMIN</span>
+    <span class="title">TWIN LOOP ADMIN</span>
     <button id="logout-btn" onclick="logout()">Logout</button>
   </header>
 
+  <div id="tabs">
+    <button class="tab active" id="tab-quotes" onclick="switchTab('quotes')">Quotes</button>
+    <button class="tab" id="tab-sales" onclick="switchTab('sales')">Sales</button>
+  </div>
+
+  <div id="quotes-view">
   <div id="toolbar">
     <input type="search" id="search" placeholder="Search by name, company, quote #, binding…" oninput="renderTable()">
     <select id="status-filter" onchange="renderTable()">
@@ -198,6 +219,34 @@ td { padding: 11px 14px; vertical-align: middle; }
     </table>
     <div id="empty-state" style="display:none;text-align:center;padding:60px;color:#888;font-size:14px;">No quotes found.</div>
     <div id="loading-state" style="text-align:center;padding:60px;color:#888;font-size:14px;">Loading quotes…</div>
+  </div>
+  </div><!-- /quotes-view -->
+
+  <!-- Sales view -->
+  <div id="sales-view" style="display:none;">
+    <div class="tw-toolbar">
+      <input type="search" id="sales-search" placeholder="Search by name, company, order #, email…" oninput="renderOrders()" style="padding:9px 14px;border:1px solid #ccc;border-radius:6px;font-size:14px;width:280px;">
+      <span id="sales-count" style="font-size:13px;color:#666;"></span>
+    </div>
+    <div class="tw-table">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortOrders('created_at')">Date ↕</th>
+            <th onclick="sortOrders('id')">Order #</th>
+            <th>Customer</th>
+            <th>Email</th>
+            <th>Items</th>
+            <th style="text-align:right;">Total</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="orders-body"></tbody>
+      </table>
+      <div id="orders-empty" style="display:none;text-align:center;padding:60px;color:#888;font-size:14px;">No sales yet.</div>
+      <div id="orders-loading" style="display:none;text-align:center;padding:60px;color:#888;font-size:14px;">Loading sales…</div>
+    </div>
   </div>
 </div>
 
@@ -237,6 +286,21 @@ td { padding: 11px 14px; vertical-align: middle; }
       <span id="amend-status"></span>
       <button class="btn btn-secondary" onclick="closeAmend()">Cancel</button>
       <button class="btn btn-danger" id="send-amend-btn" onclick="sendAmendment()">Send Amended Quote</button>
+    </div>
+  </div>
+</div>
+
+<!-- Order (sale) detail modal -->
+<div id="order-modal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="order-title">Order</h2>
+      <button class="modal-close" onclick="closeOrder()">×</button>
+    </div>
+    <div class="modal-body" id="order-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeOrder()">Close</button>
+      <button class="btn btn-primary" id="invoice-btn" onclick="downloadInvoice()">View Tax Invoice</button>
     </div>
   </div>
 </div>
@@ -508,6 +572,152 @@ async function sendAmendment() {
     document.getElementById('amend-status').textContent = 'Error: ' + (data.error || 'Unknown error');
     btn.textContent = 'Send Amended Quote';
     btn.disabled = false;
+  }
+}
+
+// ── Sales (store orders from the website DB) ────────────────────────────────────
+let allOrders    = [];
+let ordersLoaded = false;
+let orderSortKey = 'created_at';
+let orderSortAsc = false;
+let selectedOrder = null;
+
+function switchTab(tab) {
+  document.getElementById('tab-quotes').classList.toggle('active', tab === 'quotes');
+  document.getElementById('tab-sales').classList.toggle('active', tab === 'sales');
+  document.getElementById('quotes-view').style.display = tab === 'quotes' ? 'block' : 'none';
+  document.getElementById('sales-view').style.display  = tab === 'sales'  ? 'block' : 'none';
+  if (tab === 'sales' && !ordersLoaded) loadOrders();
+}
+
+async function loadOrders() {
+  document.getElementById('orders-loading').style.display = 'block';
+  const resp = await fetch('/api/admin-orders', { headers: { 'Authorization': 'Bearer ' + token } });
+  document.getElementById('orders-loading').style.display = 'none';
+  if (!resp.ok) {
+    const e = document.getElementById('orders-empty');
+    e.textContent = 'Could not load sales.'; e.style.display = 'block';
+    return;
+  }
+  allOrders = await resp.json();
+  ordersLoaded = true;
+  renderOrders();
+}
+
+function sortOrders(key) {
+  if (orderSortKey === key) orderSortAsc = !orderSortAsc;
+  else { orderSortKey = key; orderSortAsc = false; }
+  renderOrders();
+}
+
+const orderNo   = o => 'TL-' + String(o.id).padStart(6, '0');
+const custName  = o => (o.shipping_address && o.shipping_address.name) || '—';
+const custCo    = o => (o.shipping_address && o.shipping_address.company) || '';
+
+function renderOrders() {
+  const q = (document.getElementById('sales-search').value || '').toLowerCase();
+  let rows = allOrders.filter(o => {
+    if (!q) return true;
+    return [String(o.id), orderNo(o), custName(o), custCo(o), o.email]
+      .some(v => v && String(v).toLowerCase().includes(q));
+  });
+  rows.sort((a, b) => {
+    const av = a[orderSortKey] || '', bv = b[orderSortKey] || '';
+    return orderSortAsc ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+  });
+
+  document.getElementById('sales-count').textContent = rows.length + ' sale' + (rows.length !== 1 ? 's' : '');
+  const tbody = document.getElementById('orders-body');
+  const empty = document.getElementById('orders-empty');
+  if (!rows.length) { tbody.innerHTML = ''; empty.textContent = 'No sales yet.'; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = rows.map(o => {
+    const date   = o.created_at ? new Date(o.created_at).toLocaleDateString('en-AU', { day:'numeric', month:'short', year:'numeric' }) : '—';
+    const status = o.status || 'paid';
+    const items  = (o.order_items || []).reduce((n, i) => n + i.quantity, 0);
+    return `<tr onclick="openOrder(${o.id})">
+      <td style="white-space:nowrap;">${date}</td>
+      <td style="font-family:monospace;">${orderNo(o)}</td>
+      <td><strong>${esc(custName(o))}</strong>${custCo(o) ? '<br><span style="font-size:12px;color:#666;">' + esc(custCo(o)) + '</span>' : ''}</td>
+      <td style="font-size:12px;">${esc(o.email || '—')}</td>
+      <td style="font-size:12px;">${items} item${items !== 1 ? 's' : ''}</td>
+      <td style="text-align:right;font-weight:600;">$${fmtNum(o.total)}</td>
+      <td><span class="badge badge-${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span></td>
+      <td><button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;" onclick="event.stopPropagation();openOrder(${o.id})">View</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function openOrder(id) {
+  selectedOrder = allOrders.find(o => o.id === id);
+  if (!selectedOrder) return;
+  const o = selectedOrder;
+  const a = o.shipping_address || {};
+  const date   = o.created_at ? new Date(o.created_at).toLocaleDateString('en-AU', { day:'numeric', month:'long', year:'numeric' }) : '—';
+  const status = o.status || 'paid';
+  document.getElementById('order-title').textContent = 'Order ' + orderNo(o);
+
+  const itemRows = (o.order_items || []).map(i => `<tr>
+    <td style="text-align:left;">${esc(i.name)}</td>
+    <td>${i.quantity}</td>
+    <td>$${fmtNum(i.unit_price)}</td>
+    <td>$${fmtNum(i.line_total)}</td>
+  </tr>`).join('');
+
+  document.getElementById('order-body').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-section">
+        <h3>Customer</h3>
+        <div class="detail-row"><span class="detail-label">Name</span><span class="detail-value">${esc(a.name || '—')}</span></div>
+        <div class="detail-row"><span class="detail-label">Company</span><span class="detail-value">${esc(a.company || '—')}</span></div>
+        <div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">${esc(o.email || '—')}</span></div>
+        <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value">${esc(a.phone || '—')}</span></div>
+      </div>
+      <div class="detail-section">
+        <h3>Delivery</h3>
+        <div class="detail-row"><span class="detail-label">Address</span><span class="detail-value">${esc([a.line1, a.line2].filter(Boolean).join(', ') || '—')}</span></div>
+        <div class="detail-row"><span class="detail-label">Suburb</span><span class="detail-value">${esc(a.suburb || '—')} ${esc(a.state || '')} ${esc(a.postcode || '')}</span></div>
+        <div class="detail-row"><span class="detail-label">Date</span><span class="detail-value">${date}</span></div>
+        <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="badge badge-${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span></span></div>
+        <div class="detail-row"><span class="detail-label">Payment</span><span class="detail-value" style="font-family:monospace;font-size:11px;">${esc(o.stripe_payment_intent || '—')}</span></div>
+      </div>
+    </div>
+    <div style="margin-top:16px;">
+      <h3 style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Items</h3>
+      <table class="pricing-table">
+        <thead><tr><th>Description</th><th>Qty</th><th>Unit (ex GST)</th><th>Amount</th></tr></thead>
+        <tbody>
+          ${itemRows}
+          <tr><td>Subtotal (ex GST)</td><td></td><td></td><td>$${fmtNum(o.subtotal)}</td></tr>
+          <tr><td>Shipping (ex GST)</td><td></td><td></td><td>${o.shipping > 0 ? '$' + fmtNum(o.shipping) : 'Free'}</td></tr>
+          <tr><td>GST (10%)</td><td></td><td></td><td>$${fmtNum(o.gst)}</td></tr>
+          <tr class="total-row"><td>TOTAL (INC GST)</td><td></td><td></td><td>$${fmtNum(o.total)}</td></tr>
+        </tbody>
+      </table>
+    </div>`;
+
+  document.getElementById('order-modal').classList.add('open');
+}
+
+function closeOrder() { document.getElementById('order-modal').classList.remove('open'); }
+
+async function downloadInvoice() {
+  if (!selectedOrder) return;
+  const btn = document.getElementById('invoice-btn');
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Preparing…';
+  try {
+    const resp = await fetch('/api/admin-invoice?order=' + selectedOrder.id, { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!resp.ok) throw new Error('fetch failed');
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    alert('Could not load the tax invoice.');
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
   }
 }
 
