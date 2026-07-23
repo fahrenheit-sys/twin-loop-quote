@@ -685,10 +685,16 @@ function runCalculations() {
     isTentStand ? 'Stands supplied flat and scored' : null
   ].filter(Boolean).join(' — ');
 
+  // Own covers: show the client-declared GSM and the resulting cover thickness
+  // (mm) right on the cover line — that thickness is what feeds the spine calc.
+  const coverDesc = (side, name, source, gsm, mm) =>
+    side + ' Cover: ' + name + ' (' + source + ')' +
+    (name === OWN_COVERS ? ' — ' + gsm + 'gsm (' + Number(mm || 0).toFixed(2) + 'mm)' : '');
+
   let items = [
     { label: bindLabel,                                                                                           unit: bindUnit,                                                                  active: true },
-    { label: 'Front Cover: ' + state.frontCoverName + ' (' + state.frontSource + ')',                            unit: (state.frontSource === 'Twin Loop' ? state.frontCoverCost : 0) + fSurcharge, active: state.frontCoverName !== 'None' },
-    { label: 'Back Cover: '  + state.backCoverName  + ' (' + state.backSource  + ')',                            unit: (state.backSource  === 'Twin Loop' ? state.backCoverCost  : 0) + bSurcharge, active: state.backCoverName  !== 'None' },
+    { label: coverDesc('Front', state.frontCoverName, state.frontSource, state.frontCoverGSM, state.frontCoverMM), unit: (state.frontSource === 'Twin Loop' ? state.frontCoverCost : 0) + fSurcharge, active: state.frontCoverName !== 'None' },
+    { label: coverDesc('Back',  state.backCoverName,  state.backSource,  state.backCoverGSM,  state.backCoverMM),  unit: (state.backSource  === 'Twin Loop' ? state.backCoverCost  : 0) + bSurcharge, active: state.backCoverName  !== 'None' },
     { label: 'Celloglazing: ' + state.celloType + ' — please make sure covers are supplied SRA3 size',            unit: state.celloCost,                                                           active: state.celloCost > 0 }
   ];
 
