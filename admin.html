@@ -188,6 +188,7 @@ td { padding: 11px 14px; vertical-align: middle; }
   <div id="tabs">
     <button class="tab active" id="tab-quotes" onclick="switchTab('quotes')">Quotes</button>
     <button class="tab" id="tab-sales" onclick="switchTab('sales')">Sales</button>
+    <button class="tab" id="tab-myob" onclick="switchTab('myob')">MYOB Mapping</button>
   </div>
 
   <div id="quotes-view">
@@ -246,6 +247,47 @@ td { padding: 11px 14px; vertical-align: middle; }
       </table>
       <div id="orders-empty" style="display:none;text-align:center;padding:60px;color:#888;font-size:14px;">No sales yet.</div>
       <div id="orders-loading" style="display:none;text-align:center;padding:60px;color:#888;font-size:14px;">Loading sales…</div>
+    </div>
+  </div>
+
+  <!-- MYOB mapping view -->
+  <div id="myob-view" style="display:none;">
+    <div class="tw-toolbar">
+      <input type="search" id="myob-search" placeholder="Search products…" oninput="renderMyob()" style="padding:9px 14px;border:1px solid #ccc;border-radius:6px;font-size:14px;width:260px;">
+      <label style="font-size:13px;color:#555;"><input type="checkbox" id="myob-unmapped" onchange="renderMyob()"> Unmapped only</label>
+      <span id="myob-progress" style="font-size:13px;color:#666;"></span>
+    </div>
+    <div class="tw-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Webstore product / variation</th>
+            <th>SKU</th>
+            <th>MYOB code</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="myob-body"></tbody>
+      </table>
+      <div id="myob-loading" style="display:none;text-align:center;padding:60px;color:#888;font-size:14px;">Loading products…</div>
+    </div>
+  </div>
+</div>
+
+<!-- MYOB item picker modal -->
+<div id="picker-modal" class="modal-backdrop">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <h2 id="picker-title">Choose MYOB item</h2>
+      <button class="modal-close" onclick="closePicker()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="search" id="picker-search" placeholder="Search MYOB items by code or name…" oninput="searchPicker()" style="width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+      <div id="picker-results" style="margin-top:12px;max-height:340px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="clearMap()">Clear mapping</button>
+      <button class="btn btn-secondary" onclick="closePicker()">Cancel</button>
     </div>
   </div>
 </div>
@@ -583,11 +625,12 @@ let orderSortAsc = false;
 let selectedOrder = null;
 
 function switchTab(tab) {
-  document.getElementById('tab-quotes').classList.toggle('active', tab === 'quotes');
-  document.getElementById('tab-sales').classList.toggle('active', tab === 'sales');
-  document.getElementById('quotes-view').style.display = tab === 'quotes' ? 'block' : 'none';
-  document.getElementById('sales-view').style.display  = tab === 'sales'  ? 'block' : 'none';
+  ['quotes', 'sales', 'myob'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', tab === t);
+    document.getElementById(t + '-view').style.display = tab === t ? 'block' : 'none';
+  });
   if (tab === 'sales' && !ordersLoaded) loadOrders();
+  if (tab === 'myob' && !productsLoaded) loadMyob();
 }
 
 async function loadOrders() {
@@ -719,6 +762,117 @@ async function downloadInvoice() {
   } finally {
     btn.disabled = false; btn.textContent = orig;
   }
+}
+
+// ── MYOB mapping ────────────────────────────────────────────────────────────────
+let allProducts   = [];
+let productsLoaded = false;
+let pickerTarget  = null;   // { target, id } currently being mapped
+let pickerTimer   = null;
+
+async function loadMyob() {
+  document.getElementById('myob-loading').style.display = 'block';
+  const resp = await fetch('/api/admin-products', { headers: { 'Authorization': 'Bearer ' + token } });
+  document.getElementById('myob-loading').style.display = 'none';
+  if (!resp.ok) {
+    document.getElementById('myob-body').innerHTML = '<tr><td colspan="4" style="padding:20px;color:#c0392b;">Could not load products (has the MYOB schema been applied?).</td></tr>';
+    return;
+  }
+  allProducts = await resp.json();
+  productsLoaded = true;
+  renderMyob();
+}
+
+// Flatten products → mappable rows: simple products map at product level; each
+// variation of a variable product maps individually.
+function myobRows() {
+  const rows = [];
+  for (const p of allProducts) {
+    const vars = p.product_variations || [];
+    if (p.type === 'variable' && vars.length) {
+      for (const v of vars) {
+        const attrs = (v.attributes || []).map(a => a.option).filter(Boolean).join(' / ');
+        rows.push({ target: 'variation', id: v.id, label: p.name + (attrs ? ' — ' + attrs : ''), sku: v.sku || '', code: v.myob_code || '' });
+      }
+    } else {
+      rows.push({ target: 'product', id: p.id, label: p.name, sku: p.sku || '', code: p.myob_code || '' });
+    }
+  }
+  return rows;
+}
+
+function renderMyob() {
+  const q = (document.getElementById('myob-search').value || '').toLowerCase();
+  const unmappedOnly = document.getElementById('myob-unmapped').checked;
+  const all = myobRows();
+  const mapped = all.filter(r => r.code).length;
+  document.getElementById('myob-progress').textContent = mapped + ' of ' + all.length + ' mapped';
+
+  const rows = all.filter(r => {
+    if (unmappedOnly && r.code) return false;
+    if (!q) return true;
+    return (r.label + ' ' + r.sku + ' ' + r.code).toLowerCase().includes(q);
+  });
+
+  document.getElementById('myob-body').innerHTML = rows.map(r => `<tr>
+    <td>${esc(r.label)}</td>
+    <td style="font-size:12px;color:#666;">${esc(r.sku || '—')}</td>
+    <td style="font-family:monospace;font-size:12px;">${r.code ? esc(r.code) : '<span style="color:#c0392b;">— not mapped —</span>'}</td>
+    <td><button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;" onclick="openPicker('${r.target}',${r.id})">${r.code ? 'Change' : 'Map'}</button></td>
+  </tr>`).join('');
+}
+
+function openPicker(target, id) {
+  const row = myobRows().find(r => r.target === target && r.id === id);
+  pickerTarget = { target, id };
+  document.getElementById('picker-title').textContent = 'Map: ' + (row ? row.label : '');
+  document.getElementById('picker-search').value = '';
+  document.getElementById('picker-results').innerHTML = '';
+  document.getElementById('picker-modal').classList.add('open');
+  document.getElementById('picker-search').focus();
+  searchPicker();
+}
+
+function closePicker() {
+  document.getElementById('picker-modal').classList.remove('open');
+  pickerTarget = null;
+}
+
+function searchPicker() {
+  clearTimeout(pickerTimer);
+  pickerTimer = setTimeout(async () => {
+    const qv = document.getElementById('picker-search').value.trim();
+    const resp = await fetch('/api/admin-myob-items?q=' + encodeURIComponent(qv), { headers: { 'Authorization': 'Bearer ' + token } });
+    const items = resp.ok ? await resp.json() : [];
+    const box = document.getElementById('picker-results');
+    if (!items.length) { box.innerHTML = '<div style="padding:12px;color:#888;font-size:13px;">No matching MYOB items.</div>'; return; }
+    box.innerHTML = items.map(it => {
+      const code = String(it.item_number).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return `<div onclick="chooseItem('${code}')" style="padding:9px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:13px;" onmouseover="this.style.background='#f8f9ff'" onmouseout="this.style.background=''">
+        <span style="font-family:monospace;font-weight:600;">${esc(it.item_number)}</span> — ${esc(it.item_name || '')}
+      </div>`;
+    }).join('');
+  }, 220);
+}
+
+const chooseItem = code => saveMap(pickerTarget, code);
+const clearMap   = () => saveMap(pickerTarget, null);
+
+async function saveMap(t, code) {
+  if (!t) return;
+  const resp = await fetch('/api/admin-map', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target: t.target, id: t.id, code })
+  });
+  if (!resp.ok) { alert('Save failed.'); return; }
+  // Update local state so the table reflects the change immediately.
+  for (const p of allProducts) {
+    if (t.target === 'product' && p.id === t.id) p.myob_code = code;
+    if (t.target === 'variation') { const v = (p.product_variations || []).find(x => x.id === t.id); if (v) v.myob_code = code; }
+  }
+  closePicker();
+  renderMyob();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
