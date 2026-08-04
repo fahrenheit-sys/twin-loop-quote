@@ -810,15 +810,24 @@ function myobRows() {
     const defs = (p.attributes || []).filter(a => a && a.slug);
     if (p.type === 'variable' && vars.length) {
       for (const v of vars) {
-        const got = {};
-        for (const a of (v.attributes || [])) if (a.slug && a.option) got[a.slug] = a.option;
+        // Some products declare an attribute under its raw name ("Comb Size")
+        // while the variations use the taxonomy slug ("comb-size"), so match on
+        // the normalised name too — otherwise a set value looks unset.
+        const got = {}, byName = {};
+        for (const a of (v.attributes || [])) {
+          if (!a.option) continue;
+          if (a.slug) got[a.slug] = a.option;
+          byName[attrKey(a.name)] = a.option;
+        }
+        const valueOf = a => got[a.slug] || byName[attrKey(a.name)] || byName[attrKey(a.slug)] || '';
 
         const order = defs.length ? defs : (v.attributes || []).filter(a => a && a.slug);
         const anyAttrs = [];
         const parts = [];   // HTML, for the table
         const words = [];   // plain text, for the picker title and search
         for (const a of order) {
-          if (got[a.slug]) { parts.push(esc(got[a.slug])); words.push(got[a.slug]); continue; }
+          const val = valueOf(a);
+          if (val) { parts.push(esc(val)); words.push(val); continue; }
           const short = (a.name || a.slug).replace(/\s*options$/i, '').trim();
           const tag = '(any ' + short.toLowerCase() + ')';
           anyAttrs.push(short);
@@ -1013,6 +1022,9 @@ async function markExported() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtNum = v => v != null ? new Intl.NumberFormat('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) : '—';
 const esc    = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// Attribute names/slugs are inconsistent between products and variations
+// ("Comb Size:" / "Comb Size" / "comb-size") — compare them normalised.
+const attrKey = s => String(s || '').replace(/:\s*$/, '').replace(/[\s_-]+/g, '').trim().toLowerCase();
 
 // ── Auto-login if token in session ────────────────────────────────────────────
 if (token) {
