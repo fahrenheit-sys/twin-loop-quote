@@ -10,8 +10,11 @@ module.exports = async function handler(req, res) {
   const SB_KEY = process.env.WEBSITE_SUPABASE_SERVICE_KEY;
   if (!SB_URL || !SB_KEY) return res.status(500).json({ error: 'Website store DB not configured' });
 
+  // Product-level `attributes` gives the full option list and the attribute
+  // order, so the mapping table can show which options a variation left as
+  // "Any" in WooCommerce (e.g. colour) instead of silently omitting them.
   const select =
-    'id,name,sku,type,myob_code,menu_order,' +
+    'id,name,sku,type,myob_code,menu_order,attributes,' +
     'product_variations(id,sku,attributes,myob_code,menu_order)';
 
   const resp = await fetch(

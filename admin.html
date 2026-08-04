@@ -252,10 +252,24 @@ td { padding: 11px 14px; vertical-align: middle; }
 
   <!-- MYOB mapping view -->
   <div id="myob-view" style="display:none;">
+    <!-- Sales export panel -->
+    <div style="margin:18px 28px 4px;padding:16px 18px;border:1px solid #e0e0e0;border-radius:8px;background:#fff;">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <strong style="font-size:14px;">MYOB Sales Export</strong>
+        <button class="btn btn-primary" style="padding:7px 14px;font-size:13px;" onclick="generateExport()">Generate export</button>
+        <label style="font-size:12px;color:#666;"><input type="checkbox" id="export-all"> Re-export all paid orders</label>
+        <span id="export-status" style="font-size:13px;color:#666;"></span>
+      </div>
+      <div id="export-result" style="margin-top:12px;"></div>
+    </div>
+
+    <h3 style="margin:20px 28px 0;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;">Product ↔ MYOB code mapping</h3>
     <div class="tw-toolbar">
       <input type="search" id="myob-search" placeholder="Search products…" oninput="renderMyob()" style="padding:9px 14px;border:1px solid #ccc;border-radius:6px;font-size:14px;width:260px;">
       <label style="font-size:13px;color:#555;"><input type="checkbox" id="myob-unmapped" onchange="renderMyob()"> Unmapped only</label>
+      <label style="font-size:13px;color:#555;"><input type="checkbox" id="myob-anyattr" onchange="renderMyob()"> Unset option (e.g. colour) only</label>
       <span id="myob-progress" style="font-size:13px;color:#666;"></span>
+      <span id="myob-count" style="font-size:13px;color:#666;margin-left:auto;"></span>
     </div>
     <div class="tw-table">
       <table>
@@ -785,17 +799,43 @@ async function loadMyob() {
 
 // Flatten products → mappable rows: simple products map at product level; each
 // variation of a variable product maps individually.
+// Some WooCommerce variations leave an attribute as "Any" (colour, mostly), so
+// the variation records no value for it. Those slots are shown as "(any …)" in
+// the product's own attribute order rather than dropped, because a row with no
+// colour can't carry a colour-specific MYOB code.
 function myobRows() {
   const rows = [];
   for (const p of allProducts) {
     const vars = p.product_variations || [];
+    const defs = (p.attributes || []).filter(a => a && a.slug);
     if (p.type === 'variable' && vars.length) {
       for (const v of vars) {
-        const attrs = (v.attributes || []).map(a => a.option).filter(Boolean).join(' / ');
-        rows.push({ target: 'variation', id: v.id, label: p.name + (attrs ? ' — ' + attrs : ''), sku: v.sku || '', code: v.myob_code || '' });
+        const got = {};
+        for (const a of (v.attributes || [])) if (a.slug && a.option) got[a.slug] = a.option;
+
+        const order = defs.length ? defs : (v.attributes || []).filter(a => a && a.slug);
+        const anyAttrs = [];
+        const parts = [];   // HTML, for the table
+        const words = [];   // plain text, for the picker title and search
+        for (const a of order) {
+          if (got[a.slug]) { parts.push(esc(got[a.slug])); words.push(got[a.slug]); continue; }
+          const short = (a.name || a.slug).replace(/\s*options$/i, '').trim();
+          const tag = '(any ' + short.toLowerCase() + ')';
+          anyAttrs.push(short);
+          parts.push('<span style="color:#c0392b;">' + esc(tag) + '</span>');
+          words.push(tag);
+        }
+        const text = p.name + (words.length ? ' — ' + words.join(' / ') : '');
+
+        rows.push({
+          target: 'variation', id: v.id,
+          label: esc(p.name) + (parts.length ? ' — ' + parts.join(' / ') : ''),
+          text, anyAttrs,
+          sku: v.sku || '', code: v.myob_code || '',
+        });
       }
     } else {
-      rows.push({ target: 'product', id: p.id, label: p.name, sku: p.sku || '', code: p.myob_code || '' });
+      rows.push({ target: 'product', id: p.id, label: esc(p.name), text: p.name, anyAttrs: [], sku: p.sku || '', code: p.myob_code || '' });
     }
   }
   return rows;
@@ -804,18 +844,26 @@ function myobRows() {
 function renderMyob() {
   const q = (document.getElementById('myob-search').value || '').toLowerCase();
   const unmappedOnly = document.getElementById('myob-unmapped').checked;
+  const anyOnly = document.getElementById('myob-anyattr').checked;
   const all = myobRows();
   const mapped = all.filter(r => r.code).length;
-  document.getElementById('myob-progress').textContent = mapped + ' of ' + all.length + ' mapped';
+  const anyN  = all.filter(r => r.anyAttrs.length).length;
+  document.getElementById('myob-progress').textContent =
+    mapped + ' of ' + all.length + ' mapped' + (anyN ? ' · ' + anyN + ' with an unset option' : '');
 
   const rows = all.filter(r => {
     if (unmappedOnly && r.code) return false;
+    if (anyOnly && !r.anyAttrs.length) return false;
     if (!q) return true;
-    return (r.label + ' ' + r.sku + ' ' + r.code).toLowerCase().includes(q);
+    return (r.text + ' ' + r.sku + ' ' + r.code).toLowerCase().includes(q);
   });
 
+  document.getElementById('myob-count').textContent =
+    rows.length === all.length ? 'Showing all ' + all.length + ' entries'
+                               : 'Showing ' + rows.length + ' of ' + all.length + ' entries';
+
   document.getElementById('myob-body').innerHTML = rows.map(r => `<tr>
-    <td>${esc(r.label)}</td>
+    <td>${r.label}</td>
     <td style="font-size:12px;color:#666;">${esc(r.sku || '—')}</td>
     <td style="font-family:monospace;font-size:12px;">${r.code ? esc(r.code) : '<span style="color:#c0392b;">— not mapped —</span>'}</td>
     <td><button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;" onclick="openPicker('${r.target}',${r.id})">${r.code ? 'Change' : 'Map'}</button></td>
@@ -825,7 +873,7 @@ function renderMyob() {
 function openPicker(target, id) {
   const row = myobRows().find(r => r.target === target && r.id === id);
   pickerTarget = { target, id };
-  document.getElementById('picker-title').textContent = 'Map: ' + (row ? row.label : '');
+  document.getElementById('picker-title').textContent = 'Map: ' + (row ? row.text : '');
   document.getElementById('picker-search').value = '';
   document.getElementById('picker-results').innerHTML = '';
   document.getElementById('picker-modal').classList.add('open');
@@ -838,21 +886,50 @@ function closePicker() {
   pickerTarget = null;
 }
 
+// Results accumulate across pages — 1400+ MYOB items, so a single fetch can't
+// show them all. `Load more` appends the next page rather than replacing.
+let pickerItems  = [];
+let pickerTotal  = 0;
+let pickerQuery  = '';
+
 function searchPicker() {
   clearTimeout(pickerTimer);
-  pickerTimer = setTimeout(async () => {
-    const qv = document.getElementById('picker-search').value.trim();
-    const resp = await fetch('/api/admin-myob-items?q=' + encodeURIComponent(qv), { headers: { 'Authorization': 'Bearer ' + token } });
-    const items = resp.ok ? await resp.json() : [];
-    const box = document.getElementById('picker-results');
-    if (!items.length) { box.innerHTML = '<div style="padding:12px;color:#888;font-size:13px;">No matching MYOB items.</div>'; return; }
-    box.innerHTML = items.map(it => {
-      const code = String(it.item_number).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      return `<div onclick="chooseItem('${code}')" style="padding:9px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:13px;" onmouseover="this.style.background='#f8f9ff'" onmouseout="this.style.background=''">
-        <span style="font-family:monospace;font-weight:600;">${esc(it.item_number)}</span> — ${esc(it.item_name || '')}
-      </div>`;
-    }).join('');
-  }, 220);
+  pickerTimer = setTimeout(() => loadPickerPage(0), 220);
+}
+
+async function loadPickerPage(offset) {
+  const qv = document.getElementById('picker-search').value.trim();
+  const box = document.getElementById('picker-results');
+  if (offset === 0) { pickerItems = []; pickerQuery = qv; box.innerHTML = '<div style="padding:12px;color:#888;font-size:13px;">Searching…</div>'; }
+
+  const resp = await fetch('/api/admin-myob-items?q=' + encodeURIComponent(qv) + '&offset=' + offset,
+    { headers: { 'Authorization': 'Bearer ' + token } });
+  if (!resp.ok) { box.innerHTML = '<div style="padding:12px;color:#c0392b;font-size:13px;">Could not load MYOB items.</div>'; return; }
+  const d = await resp.json();
+  // A slow page for an earlier query can land after a newer search — ignore it.
+  if (qv !== pickerQuery) return;
+
+  pickerItems = pickerItems.concat(d.items || []);
+  pickerTotal = d.total || pickerItems.length;
+  renderPicker();
+}
+
+function renderPicker() {
+  const box = document.getElementById('picker-results');
+  if (!pickerItems.length) { box.innerHTML = '<div style="padding:12px;color:#888;font-size:13px;">No matching MYOB items.</div>'; return; }
+
+  const rows = pickerItems.map(it => {
+    const code = String(it.item_number).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return `<div onclick="chooseItem('${code}')" style="padding:9px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:13px;" onmouseover="this.style.background='#f8f9ff'" onmouseout="this.style.background=''">
+      <span style="font-family:monospace;font-weight:600;">${esc(it.item_number)}</span> — ${esc(it.item_name || '')}
+    </div>`;
+  }).join('');
+
+  const more = pickerItems.length < pickerTotal
+    ? `<button class="btn btn-secondary" style="width:100%;margin-top:8px;padding:8px;font-size:13px;" onclick="loadPickerPage(${pickerItems.length})">Load more (${pickerTotal - pickerItems.length} remaining)</button>`
+    : '';
+
+  box.innerHTML = `<div style="padding:6px 2px;font-size:12px;color:#666;">Showing ${pickerItems.length} of ${pickerTotal} item${pickerTotal !== 1 ? 's' : ''}${pickerTotal > pickerItems.length ? ' — refine the search or load more' : ''}</div>${rows}${more}`;
 }
 
 const chooseItem = code => saveMap(pickerTarget, code);
@@ -873,6 +950,64 @@ async function saveMap(t, code) {
   }
   closePicker();
   renderMyob();
+}
+
+// ── MYOB sales export ───────────────────────────────────────────────────────────
+let exportData = null;
+
+async function generateExport() {
+  const mode = document.getElementById('export-all').checked ? 'all' : 'new';
+  document.getElementById('export-status').textContent = 'Generating…';
+  document.getElementById('export-result').innerHTML = '';
+  const resp = await fetch('/api/admin-sales-export?mode=' + mode, { headers: { 'Authorization': 'Bearer ' + token } });
+  document.getElementById('export-status').textContent = '';
+  if (!resp.ok) { document.getElementById('export-result').innerHTML = '<span style="color:#c0392b;">Export failed.</span>'; return; }
+  exportData = await resp.json();
+  const d = exportData;
+
+  let html = '';
+  if (!d.orderCount && (!d.blocked || !d.blocked.length)) {
+    html = '<span style="color:#666;font-size:13px;">No orders to export.</span>';
+  } else if (d.orderCount) {
+    html = `<div style="font-size:13px;margin-bottom:8px;"><strong>${d.orderCount}</strong> order${d.orderCount !== 1 ? 's' : ''} ready.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+        <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="dlExport('cards')">1 ▸ Customer Cards CSV</button>
+        <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="dlExport('sales')">2 ▸ Sales CSV</button>
+        <button class="btn btn-primary" style="padding:6px 12px;font-size:12px;" onclick="markExported()">Mark ${d.orderCount} as exported</button>
+      </div>
+      <div style="font-size:11px;color:#888;">Import the Customer Cards CSV first, then the Sales CSV. Only click “Mark as exported” after both imports succeed.</div>`;
+  }
+  if (d.blocked && d.blocked.length) {
+    html += `<div style="margin-top:12px;padding:10px 12px;background:#fff8f0;border:1px solid #f0d9b5;border-radius:6px;font-size:12px;">
+      <strong style="color:#e67e22;">${d.blocked.length} order${d.blocked.length !== 1 ? 's' : ''} skipped — unmapped items:</strong>
+      <ul style="margin:6px 0 0 18px;">${d.blocked.map(b => `<li>${esc(b.order)}: ${b.items.map(esc).join(', ')}</li>`).join('')}</ul>
+      Map these in the table below, then re-generate.</div>`;
+  }
+  document.getElementById('export-result').innerHTML = html;
+}
+
+function dlExport(kind) {
+  if (!exportData) return;
+  const content = kind === 'cards' ? exportData.cardsCsv : exportData.salesCsv;
+  const name = kind === 'cards' ? 'MYOB-Customer-Cards.txt' : 'MYOB-Sales.txt';
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+async function markExported() {
+  if (!exportData || !exportData.orderIds.length) return;
+  if (!confirm('Mark ' + exportData.orderIds.length + ' orders as exported? Do this only after importing into MYOB.')) return;
+  const resp = await fetch('/api/admin-sales-mark', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderIds: exportData.orderIds })
+  });
+  if (!resp.ok) { alert('Mark failed.'); return; }
+  document.getElementById('export-result').innerHTML = '<span style="color:#2e7d32;font-size:13px;">✓ Marked ' + exportData.orderIds.length + ' orders as exported.</span>';
+  exportData = null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
