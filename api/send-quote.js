@@ -15,6 +15,33 @@ const BINDING_INFO_PDF_URLS = {
   'Comb':           [WIRE_BINDING_GUIDELINES_PDF],
 };
 
+// ── "Edit / duplicate this quote" link ────────────────────────────────────────
+// The customer's answers travel inside the link itself, so there is nothing to look up
+// and nothing to expire. index.html decodes this with the same field list (PORTABLE_FIELDS)
+// and rebuilds the quote as a new, editable one.
+const PUBLIC_URL = process.env.PUBLIC_URL || 'https://quote.twinloop.online';
+const PORTABLE_FIELDS = [
+  'bindCategory', 'bindSubtype', 'wireColour', 'spiralColour', 'tentStandThickness',
+  'qtys', 'leafSize', 'thicknessMethod', 'bookThicknessMM', 'leafCount', 'leafGSMValue',
+  'hasTabs', 'tabCount', 'tabGSMValue',
+  'frontCoverName', 'frontCoverGSM', 'frontSource', 'frontCollated', 'frontAddonName',
+  'backCoverName', 'backCoverGSM', 'backSource', 'backCollated', 'backAddonName',
+  'celloType', 'collating',
+  'customerReference', 'customerName', 'customerCompany', 'customerEmail'
+];
+
+function quoteEditUrl(state) {
+  const payload = {};
+  PORTABLE_FIELDS.forEach(k => {
+    if (state[k] !== undefined && state[k] !== '') payload[k] = state[k];
+  });
+  payload.extras = (state.selectedExtras || []).map(e => e.name);
+  payload.from   = state.quoteNumber;
+  const b64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${PUBLIC_URL}/?quote=${b64}`;
+}
+
 const FAST_TRACK_DEFAULT = `<p>Should you wish to proceed with the quote please send us a purchase order with the quote number. (Samples are always helpful especially if collating is involved.) If your job is time critical please email us as soon as possible so we can prepare ourselves and allocate production time to help meet your deadline.</p>`;
 
 // ── Per-binding email template ────────────────────────────────────────────────
@@ -141,8 +168,9 @@ module.exports = async function handler(req, res) {
         spine_mm:         computed.spineMM,
         wire_size:        computed.wireSize || null,
         quantities:       state.qtys,
-        front_cover:      { name: state.frontCoverName, source: state.frontSource, collated: state.frontCollated, gsm: state.frontCoverGSM || null },
-        back_cover:       { name: state.backCoverName,  source: state.backSource,  collated: state.backCollated,  gsm: state.backCoverGSM || null },
+        // `addon` is the Twin Loop cover added alongside a client's own cover (PVC, Polyprop, etc).
+        front_cover:      { name: state.frontCoverName, source: state.frontSource, collated: state.frontCollated, gsm: state.frontCoverGSM || null, addon: (state.frontAddonName && state.frontAddonName !== 'None') ? state.frontAddonName : null },
+        back_cover:       { name: state.backCoverName,  source: state.backSource,  collated: state.backCollated,  gsm: state.backCoverGSM || null,  addon: (state.backAddonName  && state.backAddonName  !== 'None') ? state.backAddonName  : null },
         cello:            { type: state.celloType, cost: state.celloCost },
         inserts:          { tabs: state.qtyTabs, sheets: state.qtyExtraSheets },
         extras:           state.selectedExtras,
@@ -227,9 +255,11 @@ function buildEmailHtml(state, template) {
   const today = new Date();
   const fDate = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
   const customerName = state.customerName || 'there';
+  const editUrl = quoteEditUrl(state);
 
   return `<!DOCTYPE html>
 <html>
+<head><meta charset="utf-8"></head>
 <body style="margin:0;padding:20px;background:#f5f5f5;font-family:'Segoe UI',Arial,sans-serif;">
 <div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.12);">
 
@@ -239,6 +269,7 @@ function buildEmailHtml(state, template) {
       <div style="font-size:22px;font-weight:bold;letter-spacing:2px;">QUOTE</div>
       <div style="font-size:12px;color:#555;margin-top:2px;">${state.quoteNumber}</div>
       ${state.customerReference ? `<div style="font-size:12px;color:#555;margin-top:2px;">Estimate Request #: ${state.customerReference}</div>` : ''}
+      ${state.revisedFrom ? `<div style="font-size:12px;color:#555;margin-top:2px;">Revision of: ${state.revisedFrom}</div>` : ''}
       <div style="font-size:12px;color:#555;margin-top:2px;">Date: ${fDate(today)}</div>
     </div>
   </div>
@@ -251,9 +282,26 @@ function buildEmailHtml(state, template) {
     <div style="color:#444;line-height:1.8;">${template.specsHtml}</div>` : ''}
   </div>
 
+  <div style="padding:20px 32px;border-bottom:1px solid #eee;">
+    <table style="width:100%;border-collapse:collapse;background:#fff8e1;border:2px solid #000;border-radius:6px;">
+      <tr>
+        <td style="padding:16px 18px;font-size:13px;line-height:1.7;color:#000;">
+          <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">Please quote reference ${state.quoteNumber} on your purchase order</div>
+          <div style="color:#444;">So that we can match your order to this estimate and get it into production without delay, please make sure quote reference <b>${state.quoteNumber}</b> is shown on any purchase order you send us.</div>
+        </td>
+      </tr>
+    </table>
+  </div>
+
   <div style="padding:24px 32px;border-bottom:1px solid #eee;font-size:13px;line-height:1.8;color:#333;">
     <p style="margin:0 0 8px;font-weight:bold;">Fast Tracking Your Job</p>
     <div>${template.fastTrackHtml}</div>
+  </div>
+
+  <div style="padding:24px 32px;border-bottom:1px solid #eee;font-size:13px;line-height:1.8;color:#333;">
+    <p style="margin:0 0 8px;font-weight:bold;">Need to change something?</p>
+    <p style="margin:0 0 14px;color:#444;">You can open this quote back up with your answers already filled in, change whatever you need &mdash; quantities, sizes, covers, extras &mdash; and we'll issue it to you as a new quote.</p>
+    <a href="${editUrl}" style="display:inline-block;padding:12px 22px;background:#000;color:#fff;text-decoration:none;border-radius:4px;font-weight:bold;font-size:13px;">Edit or duplicate this quote &rarr;</a>
   </div>
 
   <div style="padding:24px 32px;font-size:13px;line-height:1.8;color:#333;">
