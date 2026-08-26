@@ -162,6 +162,10 @@ function initDefaults() {
 // Customer capture is AFTER extras — they are emotionally invested by then.
 const THICKNESS_MEASURED = 'I know the finished thickness (mm)';
 const THICKNESS_SHEETS   = 'Calculate from number of internal sheets';
+// Wire, plastic spiral and comb are all costed on the length of the bound edge, so a
+// book bound on its short edge must be quoted at the next size down.
+const SHORT_EDGE_BINDINGS = ['Wire Binding', 'Plastic Spiral', 'Comb'];
+const SHORT_EDGE_NOTE     = 'Please note: if your book is A3 and the binding is on the short edge, please select A4. If your book is A4 and the binding is on the short edge, please select A5.';
 const steps = [
   { id: 'bindCategory',    q: 'What type of binding do you need?',       type: 'button',    source: 'bindCategory' },
   { id: 'bindSubtype',     q: 'Select style:',                            type: 'button',    source: 'bindSubtype' },
@@ -349,6 +353,14 @@ function render() {
         note.style.cssText = 'flex-basis:100%;width:100%;font-size:12px;color:#666;margin:10px 0 0;text-align:center;';
         note.innerText = 'Please select the size block above that most closely meets your requirements. The largest size we can EVA perfect bind is A4, and the largest size we can PUR perfect bind is 385mm x 320mm.';
         bSpace.appendChild(note);
+        // Wire/Spiral/Comb are priced off the bound edge, not the page size — a
+        // short-edge bound book uses the next size down's length of wire/spiral/comb.
+        if (SHORT_EDGE_BINDINGS.includes(state.bindCategory)) {
+          const edgeNote = document.createElement('p');
+          edgeNote.style.cssText = 'flex-basis:100%;width:100%;font-size:12px;color:#b45309;font-weight:600;margin:8px 0 0;text-align:center;';
+          edgeNote.innerText = SHORT_EDGE_NOTE;
+          bSpace.appendChild(edgeNote);
+        }
       }
     }
 
