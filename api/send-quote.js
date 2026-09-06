@@ -134,6 +134,8 @@ function getBindingTemplate(bindCategory, bindSubtype) {
   };
 }
 
+const { buildOrder, postOrder } = require('../lib/hexicom');
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -144,6 +146,16 @@ module.exports = async function handler(req, res) {
   const SB_URL  = process.env.SUPABASE_URL;
   const SB_KEY  = process.env.SUPABASE_SERVICE_KEY;
   const RESEND  = process.env.RESEND_API_KEY;
+
+  // Built before the save so the payload is stored on the row — a retry from the
+  // admin can then re-post it without the browser-side pricing maths, which is
+  // gone by then. A failure here must never stop the quote going out.
+  let hexicomPayload = null;
+  try {
+    hexicomPayload = buildOrder({ state, computed, testMode: process.env.HEXICOM_TEST_MODE === '1' });
+  } catch (e) {
+    console.error('Hexicom payload build failed:', e.message);
+  }
 
   // ── 1. Save quote to Supabase ─────────────────────────────────────────────
   try {
@@ -174,7 +186,10 @@ module.exports = async function handler(req, res) {
         cello:            { type: state.celloType, cost: state.celloCost },
         inserts:          { tabs: state.qtyTabs, sheets: state.qtyExtraSheets },
         extras:           state.selectedExtras,
-        totals:           computed.totals
+        totals:           computed.totals,
+        bind_edge:        state.bindEdge || null,
+        hexicom_payload:  hexicomPayload,
+        hexicom_status:   hexicomPayload ? null : 'skipped'
       })
     });
   } catch (e) {
@@ -247,7 +262,77 @@ module.exports = async function handler(req, res) {
     body: JSON.stringify(emailPayload(['quotes@twinloop.com.au'], internalSubject))
   });
 
-  return res.status(200).json({ success: true });
+  // ── 5b. Estimate Follow Up for high-value quotes ──────────────────────────
+  // Wayne wants anything over $5k, $10k or $15k flagged to him so it gets chased
+  // rather than sitting in the pile. Banded on the highest quantity tier, ex GST,
+  // which is the largest figure the customer has actually been quoted.
+  try {
+    const topValue = Math.max(...(computed.totals || []).map(t => Number(t.afterDisc) || 0), 0);
+    const band = topValue >= 15000 ? 15000 : topValue >= 10000 ? 10000 : topValue >= 5000 ? 5000 : null;
+    if (band) {
+      const fmt = n => '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const tierRows = (state.qtys || []).map((q, i) =>
+        `<tr><td style="padding:4px 12px 4px 0;">Qty ${q}</td><td style="padding:4px 0;">${fmt((computed.totals[i] || {}).afterDisc || 0)} ex GST</td></tr>`
+      ).join('');
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from:    'Twin Loop Binding <webquote@quote.twinloop.online>',
+          to:      ['wayne@twinloop.com.au'],
+          subject: `Estimate Follow Up — ${state.quoteNumber} — ${state.customerCompany || state.customerName || 'Unknown'} — over ${fmt(band)}`,
+          html: `<div style="font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#222;line-height:1.7;">
+            <p style="margin:0 0 12px;font-weight:bold;font-size:16px;">Estimate Follow Up — over ${fmt(band)}</p>
+            <p style="margin:0 0 12px;">Quote <b>${state.quoteNumber}</b> has been issued at ${fmt(topValue)} ex GST.</p>
+            <table style="border-collapse:collapse;margin:0 0 12px;">
+              <tr><td style="padding:4px 12px 4px 0;">Customer</td><td style="padding:4px 0;">${state.customerName || '—'}${state.customerCompany ? ' (' + state.customerCompany + ')' : ''}</td></tr>
+              <tr><td style="padding:4px 12px 4px 0;">Email</td><td style="padding:4px 0;">${state.customerEmail || '—'}</td></tr>
+              <tr><td style="padding:4px 12px 4px 0;">Binding</td><td style="padding:4px 0;">${template.subjectType}</td></tr>
+              ${tierRows}
+            </table>
+            <p style="margin:0;color:#666;font-size:13px;">Sent automatically because the quote is over ${fmt(band)}.</p>
+          </div>`
+        })
+      });
+    }
+  } catch (e) {
+    console.error('Estimate Follow Up email failed:', e.message);
+  }
+
+  // ── 6. Post the order to Hexicom ──────────────────────────────────────────
+  // Deliberately last, and deliberately swallowed: if Hexicom is down or slow the
+  // customer's quote has still gone out. The outcome is recorded against the
+  // quote so the admin can show what did and didn't reach the factory, and retry.
+  let hexicom = { ok: false, error: 'Payload could not be built' };
+  if (hexicomPayload) {
+    try {
+      hexicom = await postOrder(hexicomPayload);
+    } catch (e) {
+      hexicom = { ok: false, error: e.message };
+    }
+    try {
+      await fetch(`${SB_URL}/rest/v1/quotes?quote_number=eq.${encodeURIComponent(state.quoteNumber)}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SB_KEY,
+          'Authorization': `Bearer ${SB_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          hexicom_status:   hexicom.ok ? 'sent' : 'failed',
+          hexicom_order_no: hexicom.orderNo || null,
+          hexicom_item_nos: hexicom.itemNos || null,
+          hexicom_sent_at:  new Date().toISOString(),
+          hexicom_error:    hexicom.ok ? null : String(hexicom.error || '').slice(0, 1000)
+        })
+      });
+    } catch (e) {
+      console.error('Could not record Hexicom result:', e.message);
+    }
+  }
+
+  return res.status(200).json({ success: true, hexicom: { sent: !!hexicom.ok, orderNo: hexicom.orderNo || null } });
 };
 
 // ── Email HTML builder — template text only, quote is in the attached PDF ─────

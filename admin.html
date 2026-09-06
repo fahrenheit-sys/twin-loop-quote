@@ -79,6 +79,9 @@ td { padding: 11px 14px; vertical-align: middle; }
 .badge-fulfilled{ background: #e3f2fd; color: #1565c0; }
 .badge-refunded { background: #fdecea; color: #c0392b; }
 .badge-cancelled{ background: #fdecea; color: #c0392b; }
+.badge-failed   { background: #fdecea; color: #c0392b; }
+.badge-skipped  { background: #eee;    color: #777; }
+.badge-none     { background: #eee;    color: #999; }
 
 /* ── Tabs ── */
 #tabs { display: flex; gap: 4px; padding: 14px 28px 0; background: #f0f2f5; }
@@ -213,6 +216,7 @@ td { padding: 11px 14px; vertical-align: middle; }
           <th onclick="sortBy('bind_category')">Binding</th>
           <th>Quantities</th>
           <th>Status</th>
+          <th>Hexicom</th>
           <th></th>
         </tr>
       </thead>
@@ -316,6 +320,8 @@ td { padding: 11px 14px; vertical-align: middle; }
     <div class="modal-body" id="detail-body"></div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeDetail()">Close</button>
+      <button class="btn btn-secondary" id="hexicom-btn" onclick="sendToHexicom()">Send to Hexicom</button>
+      <span id="hexicom-status" style="font-size:13px;color:#666;"></span>
       <button class="btn btn-danger" id="open-amend-btn" onclick="openAmend()">Send Amendment</button>
     </div>
   </div>
@@ -466,6 +472,7 @@ function renderTable() {
       <td>${esc(binding)}${r.bind_subtype ? '<br><span style="font-size:11px;color:#888;">' + esc(r.bind_subtype) + '</span>' : ''}</td>
       <td style="font-size:12px;">${esc(qtys)}</td>
       <td><span class="badge badge-${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span></td>
+      <td>${hexicomBadge(r)}</td>
       <td><button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;" onclick="event.stopPropagation();openDetail('${r.quote_number}')">View</button></td>
     </tr>`;
   }).join('');
@@ -515,6 +522,9 @@ function openDetail(quoteNumber) {
         <div class="detail-row"><span class="detail-label">GSM</span><span class="detail-value">${r.gsm || '—'}gsm</span></div>
         <div class="detail-row"><span class="detail-label">Spine</span><span class="detail-value">${r.spine_mm ? r.spine_mm + 'mm' : '—'}${r.wire_size ? ' → Wire: ' + r.wire_size : ''}</span></div>
         <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="badge badge-${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span></span></div>
+        <div class="detail-row"><span class="detail-label">Hexicom</span><span class="detail-value">${hexicomBadge(r)}${r.hexicom_sent_at ? ' <span style="color:#888;font-size:12px;">' + new Date(r.hexicom_sent_at).toLocaleString('en-AU') + '</span>' : ''}</span></div>
+        ${r.hexicom_item_nos ? `<div class="detail-row"><span class="detail-label">Hexicom items</span><span class="detail-value" style="font-size:12px;">${esc(r.hexicom_item_nos)}</span></div>` : ''}
+        ${r.hexicom_error ? `<div class="detail-row"><span class="detail-label">Hexicom error</span><span class="detail-value" style="color:#c0392b;font-size:12px;word-break:break-word;">${esc(r.hexicom_error)}</span></div>` : ''}
       </div>
     </div>
 
@@ -551,6 +561,54 @@ function openDetail(quoteNumber) {
 
 function closeDetail() {
   document.getElementById('detail-modal').classList.remove('open');
+}
+
+// ── Hexicom ───────────────────────────────────────────────────────────────────
+// Every quote is posted to Hexicom as an Order when it's issued. These show which
+// ones made it, so a failed send can be spotted and re-sent rather than quietly
+// never reaching the factory.
+function hexicomBadge(r) {
+  const st = r.hexicom_status;
+  if (st === 'sent')    return `<span class="badge badge-sent">Sent${r.hexicom_order_no ? ' ' + esc(r.hexicom_order_no) : ''}</span>`;
+  if (st === 'failed')  return '<span class="badge badge-failed">Failed</span>';
+  if (st === 'skipped') return '<span class="badge badge-skipped">Skipped</span>';
+  return '<span class="badge badge-none">—</span>';
+}
+
+// Re-posting a quote that actually succeeded is safe: Hexicom enforces the
+// order id as unique and rejects the duplicate rather than creating a second job.
+async function sendToHexicom() {
+  if (!selected) return;
+  const btn  = document.getElementById('hexicom-btn');
+  const note = document.getElementById('hexicom-status');
+  btn.disabled = true;
+  note.textContent = 'Sending…';
+
+  try {
+    const resp = await fetch('/api/hexicom-send', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quoteNumber: selected.quote_number })
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      note.textContent = 'Sent' + (data.orderNo ? ' — order ' + data.orderNo : '');
+      selected.hexicom_status   = 'sent';
+      selected.hexicom_order_no = data.orderNo || null;
+      selected.hexicom_item_nos = data.itemNos || null;
+      selected.hexicom_error    = null;
+    } else {
+      note.textContent = 'Failed: ' + (data.error || 'Unknown error') +
+        (data.maybeDuplicate ? ' — Hexicom returns the same error for a duplicate, so check whether this order already exists before re-sending.' : '');
+      selected.hexicom_status = 'failed';
+    }
+  } catch (e) {
+    note.textContent = 'Failed: ' + e.message;
+  }
+
+  selected.hexicom_sent_at = new Date().toISOString();
+  renderTable();
+  btn.disabled = false;
 }
 
 // ── Amend modal ───────────────────────────────────────────────────────────────

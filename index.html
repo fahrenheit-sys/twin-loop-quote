@@ -150,7 +150,7 @@ function initDefaults() {
     backAddonName:  'None', backAddonMM:  0, backAddonCost:  0,
     celloType: 'No', celloCost: 0, celloSetup: 0,
     collating: {},
-    selectedExtras: [], bindCategory: '', bindSubtype: '', wireColour: '', spiralColour: '', history: [],
+    selectedExtras: [], bindCategory: '', bindSubtype: '', wireColour: '', spiralColour: '', bindEdge: '', history: [],
     hasTabs: '', tabCount: 0, tabGSMValue: 0, tabMM: 0, tentStandThickness: 0,
     customerName: '', customerCompany: '', customerEmail: '', customerReference: '',
     revisedFrom: '',
@@ -173,6 +173,8 @@ const steps = [
   { id: 'tentStandThickness', q: 'What is the thickness of the tent stand (mm)?', type: 'number', condition: () => state.bindCategory === 'Wire Binding' && state.bindSubtype === 'Calendar with tent stand / flip chart' },
   { id: 'qtys',            q: 'How many copies do you need?',             type: 'multi-qty' },
   { id: 'leafSize',        q: 'What is your document size?',              type: 'button',    source: 'leafSizes' },
+  { id: 'bindEdge',        q: 'Which edge is being bound?',               type: 'button',    options: ['Long edge', 'Short edge'],
+    condition: () => ['Wire Binding', 'Plastic Spiral', 'Comb'].includes(state.bindCategory) },
   { id: 'thicknessMethod', q: 'How would you like to provide your book thickness?', type: 'button', options: [THICKNESS_MEASURED, THICKNESS_SHEETS], condition: () => isPerfect() },
   { id: 'bookThicknessMM', q: 'How thick does your book measure? (mm)',   type: 'number',    condition: () => isPerfect() && state.thicknessMethod === THICKNESS_MEASURED },
   { id: 'leafCount',       q: 'How many internal sheets per book?',       type: 'number',    condition: () => !(isPerfect() && state.thicknessMethod === THICKNESS_MEASURED) },
@@ -770,6 +772,7 @@ function runCalculations() {
       : (leafCount + ' leaves' + (state.leafGSMValue ? ' (' + state.leafGSMValue + 'gsm)' : '') + (suppliedCollated ? ' (text supplied collated)' : '')),
     (state.frontCoverName !== 'None' && state.frontCoverGSM) ? 'Front cover: ' + state.frontCoverGSM + 'gsm' : null,
     (state.backCoverName  !== 'None' && state.backCoverGSM)  ? 'Back cover: '  + state.backCoverGSM  + 'gsm' : null,
+    state.bindEdge ? 'Bound on ' + state.bindEdge.toLowerCase() : null,
     showWireInDesc ? wireSizeLabel + ': ' + wireSize : null,
     isWire && state.wireColour ? 'Colour: ' + state.wireColour : null,
     state.bindCategory === 'Plastic Spiral' && state.spiralColour ? 'Colour: ' + state.spiralColour : null,
@@ -1170,7 +1173,7 @@ const EDIT_PARAM = 'quote';
 // always costed at today's prices rather than the prices baked in when it was first made.
 const PORTABLE_FIELDS = [
   'bindCategory', 'bindSubtype', 'wireColour', 'spiralColour', 'tentStandThickness',
-  'qtys', 'leafSize', 'thicknessMethod', 'bookThicknessMM', 'leafCount', 'leafGSMValue',
+  'qtys', 'leafSize', 'bindEdge', 'thicknessMethod', 'bookThicknessMM', 'leafCount', 'leafGSMValue',
   'hasTabs', 'tabCount', 'tabGSMValue',
   'frontCoverName', 'frontCoverGSM', 'frontSource', 'frontCollated', 'frontAddonName',
   'backCoverName', 'backCoverGSM', 'backSource', 'backCollated', 'backAddonName',
@@ -1283,6 +1286,7 @@ function reviewRows() {
               state.wireColour || state.spiralColour || null].filter(Boolean).join(' — ') },
     { step: 'qtys',        label: 'Quantities',    value: (state.qtys || []).join(', ') },
     { step: 'leafSize',    label: 'Document size', value: state.leafSize },
+    { step: 'bindEdge',    label: 'Binding edge',  value: state.bindEdge },
     isMeasured
       ? { step: 'bookThicknessMM', label: 'Book thickness', value: state.bookThicknessMM + 'mm' }
       : { step: 'leafCount', label: 'Internal sheets', value: state.leafCount + ' leaves' },
