@@ -197,7 +197,7 @@ module.exports = async function handler(req, res) {
   }
 
   // ── 2. Build email ────────────────────────────────────────────────────────
-  // Note: the internal copy (step 5 below) always fires regardless of customerEmail —
+  // Note: the internal copy (step 4 below) always fires regardless of customerEmail —
   // Twin Loop should get a record of every quote generated, including PDF downloads
   // where the customer never asked for their own emailed copy.
   const template  = getBindingTemplate(state.bindCategory, state.bindSubtype);
@@ -236,7 +236,36 @@ module.exports = async function handler(req, res) {
     ...(attachments.length > 0 ? { attachments } : {})
   });
 
-  // ── 4. Send to customer ───────────────────────────────────────────────────
+  // ── 4. Internal copy ──────────────────────────────────────────────────────
+  // Deliberately sent BEFORE the customer's copy and never gated on it. Twin Loop
+  // needs a record of every quote generated — including PDF downloads where the
+  // customer never asked for their own copy, and including quotes where the
+  // customer's own address turns out to be undeliverable.
+  //
+  // Ordering is what guarantees that. This used to sit after the customer send,
+  // which returned 500 on a Resend rejection and took quotes@twinloop.com.au's
+  // copy down with it — so a single mistyped customer address lost Twin Loop the
+  // quote entirely, with nothing on the thread to say so. A real 422 ("Invalid
+  // `to` field") was logged on this route between 19 Aug and 1 Sep 2026.
+  // Found after Wayne reported a missing MBE Parramatta quote, 2026-09-07.
+  const internalSubject = `New Quote ${state.quoteNumber} — ${state.customerName || 'Unknown'}${state.customerCompany ? ' (' + state.customerCompany + ')' : ''} — ${template.subjectType}`;
+  const internalRes = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(emailPayload(['quotes@twinloop.com.au'], internalSubject))
+  });
+
+  // Logged, not returned: the customer's copy below still has to go out, and a
+  // failure here is Twin Loop's problem rather than the customer's. The result
+  // was previously discarded altogether, so an internal copy could fail on every
+  // quote and nothing anywhere would say so. This line is what makes it visible
+  // in Vercel's runtime errors.
+  if (!internalRes.ok) {
+    const err = await internalRes.json().catch(() => ({}));
+    console.error('Resend error (internal copy to quotes@twinloop.com.au):', err);
+  }
+
+  // ── 5. Send to customer ───────────────────────────────────────────────────
   // Skipped for internalOnly requests (e.g. the customer clicked "Download PDF" rather
   // than "Email Me This Quote") — only Twin Loop's internal copy is sent in that case.
   if (!internalOnly && state.customerEmail) {
@@ -249,18 +278,10 @@ module.exports = async function handler(req, res) {
 
     if (!emailRes.ok) {
       const err = await emailRes.json().catch(() => ({}));
-      console.error('Resend error:', err);
+      console.error('Resend error (customer copy):', err);
       return res.status(500).json({ error: 'Email failed', detail: err });
     }
   }
-
-  // ── 5. Internal copy ──────────────────────────────────────────────────────
-  const internalSubject = `New Quote ${state.quoteNumber} — ${state.customerName || 'Unknown'}${state.customerCompany ? ' (' + state.customerCompany + ')' : ''} — ${template.subjectType}`;
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(emailPayload(['quotes@twinloop.com.au'], internalSubject))
-  });
 
   // ── 5b. Estimate Follow Up for high-value quotes ──────────────────────────
   // Wayne wants anything over $5k, $10k or $15k flagged to him so it gets chased
