@@ -199,6 +199,37 @@ function isCase()    { return state.bindCategory === 'Case Binding';    }
 // they pick the GSM instead of a Twin Loop cover material, and that GSM's caliper (mm)
 // feeds the spine/thickness calculation just like an internal sheet does.
 const OWN_COVERS = 'Own Covers';
+
+// A client-supplied cover marked "Collated? Yes" arrives already gathered with the
+// text, so there is nothing left for us to collate. Offering "Collate front covers"
+// for it invites the customer to pay for work that isn't there. The Collated?
+// dropdown only appears for client-supplied covers (Own Covers are client-supplied
+// by nature), so a "Yes" can only have come from a cover we would otherwise collate.
+// Wayne, 2026-09-07.
+function coverSuppliedCollated(side) {
+  const name = side === 'f' ? state.frontCoverName : state.backCoverName;
+  const src  = side === 'f' ? state.frontSource    : state.backSource;
+  const coll = side === 'f' ? state.frontCollated  : state.backCollated;
+  if (!name || name === 'None') return false;
+  return (name === OWN_COVERS || src === 'Client Supplied') && coll === 'Yes';
+}
+
+// The collating options actually on offer for this quote. Used by both the extras
+// screen and the pricing, so an option that isn't shown can never be charged —
+// previously the pricing walked the full list and only the UI filtered it.
+// The combined front & back option goes as soon as *either* side is supplied
+// collated: billing it would charge $0.20 a book for at most $0.10 of work.
+function collatingOptionsAvailable() {
+  const f = coverSuppliedCollated('f');
+  const b = coverSuppliedCollated('b');
+  return (db['collating-options'] || []).filter(opt => {
+    if ((isCase() || isPerfect()) && opt.key !== 'text') return false;
+    if (opt.key === 'front_covers')          return !f;
+    if (opt.key === 'back_covers')           return !b;
+    if (opt.key === 'front_and_back_covers') return !f && !b;
+    return true;
+  });
+}
 function gsmToMM(g) {
   const row = (db.gsm || []).find(x => String(x.GSM) === String(g));
   return row ? parseFloat(row.MM) || 0 : 0;
@@ -353,7 +384,12 @@ function render() {
       if (current.id === 'leafSize') {
         const note = document.createElement('p');
         note.style.cssText = 'flex-basis:100%;width:100%;font-size:12px;color:#666;margin:10px 0 0;text-align:center;';
-        note.innerText = 'Please select the size block above that most closely meets your requirements. The largest size we can EVA perfect bind is A4, and the largest size we can PUR perfect bind is 385mm x 320mm.';
+        // The EVA/PUR capacity limits only mean anything to someone buying perfect
+        // binding — on wire, spiral and comb they are noise next to the short-edge
+        // note that follows. Wayne, 2026-09-07.
+        note.innerText = 'Please select the size block above that most closely meets your requirements.'
+          + (SHORT_EDGE_BINDINGS.includes(state.bindCategory) ? ''
+             : ' The largest size we can EVA perfect bind is A4, and the largest size we can PUR perfect bind is 385mm x 320mm.');
         bSpace.appendChild(note);
         // Wire/Spiral/Comb are priced off the bound edge, not the page size — a
         // short-edge bound book uses the next size down's length of wire/spiral/comb.
@@ -453,7 +489,12 @@ function render() {
       h.innerText = 'Collating options (select all that apply):';
       h.style.cssText = 'font-weight:bold;font-size:13px;margin-bottom:2px;';
       panel.appendChild(h);
-      const collatingOpts = (db['collating-options'] || []).filter(opt => (isCase() || isPerfect()) ? opt.key === 'text' : true);
+      const collatingOpts = collatingOptionsAvailable();
+      // A customer can tick "Collate front covers", go back, and then set that cover
+      // to supplied collated. Drop anything no longer on offer so it can't sit ticked
+      // out of sight in state.collating.
+      const availKeys = new Set(collatingOpts.map(o => o.key));
+      Object.keys(state.collating).forEach(k => { if (!availKeys.has(k)) delete state.collating[k]; });
       collatingOpts.forEach(opt => {
         const cur = state.collating[opt.key];
         const on  = opt.needsQty ? (parseFloat(cur || 0) > 0) : !!cur;
@@ -811,7 +852,7 @@ function runCalculations() {
   const collatingOn   = state.selectedExtras.some(e => e.name === 'Collating');
   const collatingLines = [];
   if (collatingOn) {
-    (db['collating-options'] || []).forEach(opt => {
+    collatingOptionsAvailable().forEach(opt => {
       const sel    = state.collating[opt.key];
       const qty    = opt.needsQty ? parseFloat(sel || 0) : 0;
       const active = opt.needsQty ? qty > 0 : !!sel;
