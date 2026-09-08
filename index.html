@@ -856,7 +856,12 @@ function runCalculations() {
     { label: addonDesc('Front', state.frontAddonName),                                                            unit: state.frontAddonCost || 0,                                                 active: !!state.frontAddonName && state.frontAddonName !== 'None' },
     { label: coverDesc('Back',  state.backCoverName,  state.backSource,  state.backCoverGSM,  state.backCoverMM),  unit: (state.backSource  === 'Twin Loop' ? state.backCoverCost  : 0) + bSurcharge, active: state.backCoverName  !== 'None' },
     { label: addonDesc('Back',  state.backAddonName),                                                             unit: state.backAddonCost || 0,                                                  active: !!state.backAddonName && state.backAddonName !== 'None' },
-    { label: 'Celloglazing: ' + state.celloType + ' — please make sure covers are supplied SRA3 size',            unit: state.celloCost,                                                           active: state.celloCost > 0 }
+    // Perfect binding is celloglazed flat as an SRA3 sheet; a case binding cover is
+    // cut and wrapped to the finished case, so the bleed is what has to be right
+    // there and the sheet size is beside the point. Wayne, 2026-09-08.
+    { label: 'Celloglazing: ' + state.celloType + ' — ' + (isCase()
+        ? 'please make sure covers are supplied with the correct bleed'
+        : 'please make sure covers are supplied SRA3 size'),                                                          unit: state.celloCost,                                                           active: state.celloCost > 0 }
   ];
 
   state.selectedExtras.forEach(e => {
