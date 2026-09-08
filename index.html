@@ -200,34 +200,50 @@ function isCase()    { return state.bindCategory === 'Case Binding';    }
 // feeds the spine/thickness calculation just like an internal sheet does.
 const OWN_COVERS = 'Own Covers';
 
-// A client-supplied cover marked "Collated? Yes" arrives already gathered with the
-// text, so there is nothing left for us to collate. Offering "Collate front covers"
-// for it invites the customer to pay for work that isn't there. The Collated?
-// dropdown only appears for client-supplied covers (Own Covers are client-supplied
-// by nature), so a "Yes" can only have come from a cover we would otherwise collate.
-// Wayne, 2026-09-07.
-function coverSuppliedCollated(side) {
+// The Collated? dropdown only appears for client-supplied covers (Own Covers are
+// client-supplied by nature, and submitCovers sets their source accordingly), so
+// both helpers below are only ever true for a cover we would otherwise handle.
+function coverIsClientSupplied(side) {
   const name = side === 'f' ? state.frontCoverName : state.backCoverName;
   const src  = side === 'f' ? state.frontSource    : state.backSource;
-  const coll = side === 'f' ? state.frontCollated  : state.backCollated;
   if (!name || name === 'None') return false;
-  return (name === OWN_COVERS || src === 'Client Supplied') && coll === 'Yes';
+  return name === OWN_COVERS || src === 'Client Supplied';
+}
+// "Collated? Yes" — the covers arrive already gathered with the text, so there is
+// nothing left for us to collate and offering to do it invites the customer to pay
+// for work that isn't there.
+function coverSuppliedCollated(side) {
+  const coll = side === 'f' ? state.frontCollated : state.backCollated;
+  return coverIsClientSupplied(side) && coll === 'Yes';
+}
+// "Collated? No" — we do have to collate them, and the cover line already carries
+// $0.10/book for exactly that (fSurcharge/bSurcharge below, the same rate as the
+// collating_covers table). Wayne wants the option left on the menu and ticked, so
+// the customer can see the work is accounted for and carry on to tabs and inserts,
+// but it must not be charged a second time. Wayne, 2026-09-08.
+function coverCollateIncluded(side) {
+  const coll = side === 'f' ? state.frontCollated : state.backCollated;
+  return coverIsClientSupplied(side) && coll === 'No';
 }
 
-// The collating options actually on offer for this quote. Used by both the extras
-// screen and the pricing, so an option that isn't shown can never be charged —
-// previously the pricing walked the full list and only the UI filtered it.
-// The combined front & back option goes as soon as *either* side is supplied
-// collated: billing it would charge $0.20 a book for at most $0.10 of work.
+// The collating options on offer, each tagged with whether it is already paid for.
+// Shared by the extras screen and the pricing, so an option can never be charged
+// on a basis different from the one it was shown on.
 function collatingOptionsAvailable() {
-  const f = coverSuppliedCollated('f');
-  const b = coverSuppliedCollated('b');
-  return (db['collating-options'] || []).filter(opt => {
-    if ((isCase() || isPerfect()) && opt.key !== 'text') return false;
-    if (opt.key === 'front_covers')          return !f;
-    if (opt.key === 'back_covers')           return !b;
-    if (opt.key === 'front_and_back_covers') return !f && !b;
-    return true;
+  const fYes = coverSuppliedCollated('f'), bYes = coverSuppliedCollated('b');
+  const fInc = coverCollateIncluded('f'),  bInc = coverCollateIncluded('b');
+  return (db['collating-options'] || []).flatMap(opt => {
+    if ((isCase() || isPerfect()) && opt.key !== 'text') return [];
+    if (opt.key === 'front_covers') return fYes ? [] : [{ ...opt, included: fInc }];
+    if (opt.key === 'back_covers')  return bYes ? [] : [{ ...opt, included: bInc }];
+    // The combined option can't be priced against a per-side surcharge — charging
+    // $0.20 when one side is already covered would be the double-charge again — so
+    // it only stands when neither cover is client-supplied. The per-side options
+    // cover every other case.
+    if (opt.key === 'front_and_back_covers') {
+      return (coverIsClientSupplied('f') || coverIsClientSupplied('b')) ? [] : [opt];
+    }
+    return [opt];
   });
 }
 function gsmToMM(g) {
@@ -497,14 +513,20 @@ function render() {
       Object.keys(state.collating).forEach(k => { if (!availKeys.has(k)) delete state.collating[k]; });
       collatingOpts.forEach(opt => {
         const cur = state.collating[opt.key];
-        const on  = opt.needsQty ? (parseFloat(cur || 0) > 0) : !!cur;
+        // An included option is ticked because the cover line already pays for it —
+        // it isn't a choice, so clicking it does nothing rather than silently
+        // toggling something the customer can't actually turn off.
+        const on  = opt.included ? true : (opt.needsQty ? (parseFloat(cur || 0) > 0) : !!cur);
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:center;gap:10px;';
-        const tbtn = createBtn((on ? '☑ ' : '☐ ') + opt.label, () => {
+        const label = opt.label + (opt.included ? ' — already included with your covers' : '');
+        const tbtn = createBtn((on ? '☑ ' : '☐ ') + label, () => {
+          if (opt.included) return;
           if (opt.needsQty) state.collating[opt.key] = on ? 0 : (parseFloat(cur) || 1);
           else              state.collating[opt.key] = !on;
           render();
         });
+        if (opt.included) { tbtn.style.cursor = 'default'; tbtn.style.opacity = '0.85'; }
         tbtn.style.flex = '1'; tbtn.style.textAlign = 'left';
         if (on) { tbtn.style.background = '#000'; tbtn.style.color = '#fff'; }
         row.appendChild(tbtn);
@@ -853,6 +875,8 @@ function runCalculations() {
   const collatingLines = [];
   if (collatingOn) {
     collatingOptionsAvailable().forEach(opt => {
+      // Already carried by the cover line — see coverCollateIncluded().
+      if (opt.included) return;
       const sel    = state.collating[opt.key];
       const qty    = opt.needsQty ? parseFloat(sel || 0) : 0;
       const active = opt.needsQty ? qty > 0 : !!sel;
