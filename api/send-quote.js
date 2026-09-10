@@ -184,7 +184,11 @@ module.exports = async function handler(req, res) {
         front_cover:      { name: state.frontCoverName, source: state.frontSource, collated: state.frontCollated, gsm: state.frontCoverGSM || null, addon: (state.frontAddonName && state.frontAddonName !== 'None') ? state.frontAddonName : null },
         back_cover:       { name: state.backCoverName,  source: state.backSource,  collated: state.backCollated,  gsm: state.backCoverGSM || null,  addon: (state.backAddonName  && state.backAddonName  !== 'None') ? state.backAddonName  : null },
         cello:            { type: state.celloType, cost: state.celloCost },
-        inserts:          { tabs: state.qtyTabs, sheets: state.qtyExtraSheets },
+        // Tab and sheet counts live under state.collating, keyed by the collating
+        // option that sets them — qtyTabs/qtyExtraSheets never existed, so every
+        // row until 2026-09-10 stored an empty inserts object.
+        inserts:          { tabs:   parseFloat((state.collating || {}).tabs)   || 0,
+                            sheets: parseFloat((state.collating || {}).sheets) || 0 },
         extras:           state.selectedExtras,
         totals:           computed.totals,
         bind_edge:        state.bindEdge || null,
