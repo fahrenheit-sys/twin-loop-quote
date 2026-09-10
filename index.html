@@ -149,7 +149,7 @@ function initDefaults() {
     frontAddonName: 'None', frontAddonMM: 0, frontAddonCost: 0,
     backAddonName:  'None', backAddonMM:  0, backAddonCost:  0,
     celloType: 'No', celloCost: 0, celloSetup: 0,
-    collating: {},
+    collating: {}, collatingLeaves: 0,
     selectedExtras: [], bindCategory: '', bindSubtype: '', wireColour: '', spiralColour: '', bindEdge: '', history: [],
     hasTabs: '', tabCount: 0, tabGSMValue: 0, tabMM: 0, tentStandThickness: 0,
     customerName: '', customerCompany: '', customerEmail: '', customerReference: '',
@@ -234,6 +234,11 @@ function collatingOptionsAvailable() {
   const fInc = coverCollateIncluded('f'),  bInc = coverCollateIncluded('b');
   return (db['collating-options'] || []).flatMap(opt => {
     if ((isCase() || isPerfect()) && opt.key !== 'text') return [];
+    // Perfect binding customers who gave us a measured thickness were never asked
+    // how many sheets are in the book, but text collating is priced per 1,000
+    // sheets — without a count the line collapses to its $50 minimum, which is all
+    // Wayne was seeing. Ask for it on the option itself. Wayne, 2026-09-10.
+    if (opt.key === 'text') return [{ ...opt, needsLeaves: !(parseFloat(state.leafCount) > 0) }];
     if (opt.key === 'front_covers') return fYes ? [] : [{ ...opt, included: fInc }];
     if (opt.key === 'back_covers')  return bYes ? [] : [{ ...opt, included: bInc }];
     // The combined option can't be priced against a per-side surcharge — charging
@@ -530,6 +535,17 @@ function render() {
         tbtn.style.flex = '1'; tbtn.style.textAlign = 'left';
         if (on) { tbtn.style.background = '#000'; tbtn.style.color = '#fff'; }
         row.appendChild(tbtn);
+        if (opt.needsLeaves && on) {
+          const lin = document.createElement('input');
+          lin.type = 'number'; lin.min = '1'; lin.placeholder = 'sheets';
+          lin.value = parseFloat(state.collatingLeaves) || '';
+          lin.style.cssText = 'width:90px;padding:8px;border:1px solid #000;border-radius:4px;font-family:inherit;';
+          lin.onchange = () => { state.collatingLeaves = parseFloat(lin.value) || 0; render(); };
+          const lbl = document.createElement('span');
+          lbl.innerText = 'sheets per book';
+          lbl.style.cssText = 'font-size:11px;';
+          row.appendChild(lin); row.appendChild(lbl);
+        }
         if (opt.needsQty && on) {
           const qin = document.createElement('input');
           qin.type = 'number'; qin.min = '1'; qin.value = parseFloat(cur) || 1;
@@ -887,12 +903,19 @@ function runCalculations() {
       const active = opt.needsQty ? qty > 0 : !!sel;
       if (!active) return;
       const costs = state.qtys.map(q => {
-        if (opt.unit === 'per_1000_sheets')   return Math.max(opt.min || 0, (q * leafCount / 1000) * opt.cost);
+        if (opt.unit === 'per_1000_sheets') {
+          const sheets = leafCount || parseFloat(state.collatingLeaves) || 0;
+          return Math.max(opt.min || 0, (q * sheets / 1000) * opt.cost);
+        }
         if (opt.unit === 'per_book')          return opt.cost * q;
         if (opt.unit === 'per_unit_per_book') return opt.cost * qty * q;
         return 0;
       });
-      collatingLines.push({ label: opt.needsQty ? `${opt.label} (${qty}/book)` : opt.label, costs });
+      const sheets = parseFloat(state.collatingLeaves) || 0;
+      const label = opt.needsQty      ? `${opt.label} (${qty}/book)`
+                  : (opt.needsLeaves && sheets) ? `${opt.label} (${sheets} sheets/book)`
+                  : opt.label;
+      collatingLines.push({ label, costs });
     });
   }
 
@@ -1247,7 +1270,7 @@ const PORTABLE_FIELDS = [
   'hasTabs', 'tabCount', 'tabGSMValue',
   'frontCoverName', 'frontCoverGSM', 'frontSource', 'frontCollated', 'frontAddonName',
   'backCoverName', 'backCoverGSM', 'backSource', 'backCollated', 'backAddonName',
-  'celloType', 'collating',
+  'celloType', 'collating', 'collatingLeaves',
   'customerReference', 'customerName', 'customerCompany', 'customerEmail'
 ];
 
