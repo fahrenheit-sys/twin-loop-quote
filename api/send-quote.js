@@ -1,15 +1,13 @@
 // ── Binding info PDF URLs ─────────────────────────────────────────────────────
 // Each binding type can have one or more setup guide PDFs attached to quotes.
+const PERFECT_BINDING_GUIDELINES_PDF       = 'https://twin-loop-quote.vercel.app/perfect-binding-guidelines.pdf';
 const WIRE_BINDING_GUIDELINES_PDF          = 'https://twin-loop-quote.vercel.app/wire-binding-guidelines.pdf';
 const PLASTIC_SPIRAL_BINDING_GUIDELINES_PDF = 'https://twin-loop-quote.vercel.app/plastic-spiral-binding-guidelines.pdf';
+const CASE_BINDING_GUIDELINES_PDF           = 'https://twin-loop-quote.vercel.app/case-binding-guidelines.pdf';
 
 const BINDING_INFO_PDF_URLS = {
-  'Prefect Binding': [
-    'https://www.twinloop.com.au/wp-content/uploads/2021/06/Perfect-Binding-Layout-Guidlines_Jul-21.pdf',
-  ],
-  'Case Binding': [
-    'https://www.twinloop.com.au/wp-content/uploads/2021/06/Case-Binding-Guidlines-March-2025-v2.pdf',
-  ],
+  'Prefect Binding': [PERFECT_BINDING_GUIDELINES_PDF],
+  'Case Binding': [CASE_BINDING_GUIDELINES_PDF],
   'Wire Binding':   [WIRE_BINDING_GUIDELINES_PDF],
   'Plastic Spiral': [PLASTIC_SPIRAL_BINDING_GUIDELINES_PDF],
   'Comb':           [WIRE_BINDING_GUIDELINES_PDF],
