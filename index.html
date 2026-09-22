@@ -768,7 +768,15 @@ document.getElementById('submit-covers').onclick = () => {
 };
 
 document.getElementById('back-btn').onclick = () => {
-  if (state.history.length > 0) { state.step = state.history.pop(); render(); }
+  if (state.history.length > 0) {
+    state.step = state.history.pop();
+    // Stepping back off the finished quote (or the review screen) needs to undo the
+    // display:none those screens set on the logo and the input area, or the question
+    // text changes but no input controls appear.
+    document.getElementById('header-logo').style.display = '';
+    document.getElementById('input-area').style.display = 'block';
+    render();
+  }
 };
 
 // ── Calculations & result screen ──────────────────────────────────────────────
