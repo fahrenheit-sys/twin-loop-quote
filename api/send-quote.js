@@ -20,11 +20,11 @@ const BINDING_INFO_PDF_URLS = {
 const PUBLIC_URL = process.env.PUBLIC_URL || 'https://quote.twinloop.online';
 const PORTABLE_FIELDS = [
   'bindCategory', 'bindSubtype', 'wireColour', 'spiralColour', 'tentStandThickness',
-  'qtys', 'leafSize', 'thicknessMethod', 'bookThicknessMM', 'leafCount', 'leafGSMValue',
+  'qtys', 'leafSize', 'bindEdge', 'thicknessMethod', 'bookThicknessMM', 'leafCount', 'leafGSMValue',
   'hasTabs', 'tabCount', 'tabGSMValue',
   'frontCoverName', 'frontCoverGSM', 'frontSource', 'frontCollated', 'frontAddonName',
   'backCoverName', 'backCoverGSM', 'backSource', 'backCollated', 'backAddonName',
-  'celloType', 'collating',
+  'celloType', 'collating', 'collatingLeaves',
   'customerReference', 'customerName', 'customerCompany', 'customerEmail'
 ];
 
@@ -132,104 +132,50 @@ function getBindingTemplate(bindCategory, bindSubtype) {
   };
 }
 
-const { buildOrder, postOrder } = require('../lib/hexicom');
+const { buildOrders, postOrders, hexicomColumns } = require('../lib/hexicom');
 
+// Every quote is recorded exactly once per quote number — saved to Supabase, copied
+// to quotes@twinloop.com.au, flagged to Wayne if it's large, and posted to Hexicom.
+// The browser records it the moment the finished quote is shown (`mode: 'record'`);
+// "Email Me This Quote" then only adds the customer's copy.
+//
+// Until 2026-09-24 none of that happened unless the customer clicked Email or
+// Download. A customer who read the quote on screen, printed it or noted the
+// number and sent a PO left Twin Loop with nothing — not in the admin, not in
+// Hexicom, not in quotes@. Wayne found 2026-09-17-P798 (Morgan Printing) that way.
+// Recording once also ends the duplicate rows and double internal emails that
+// Email + Download used to produce, and stops a second click re-posting to Hexicom
+// and flipping a sent quote to "Failed" on the duplicate-id rejection.
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
   if (!body || !body.state) return res.status(400).json({ error: 'Missing data' });
 
-  const { state, computed, quotePdfBase64, internalOnly } = body;
+  const { state, computed, quotePdfBase64 } = body;
+  // `internalOnly` is what pages cached before 2026-09-24 send from Download PDF.
+  const recordOnly = body.mode === 'record' || !!body.internalOnly;
   const SB_URL  = process.env.SUPABASE_URL;
   const SB_KEY  = process.env.SUPABASE_SERVICE_KEY;
   const RESEND  = process.env.RESEND_API_KEY;
+  const sbHeaders = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
+  const quoteFilter = `quote_number=eq.${encodeURIComponent(state.quoteNumber)}`;
 
-  // Built before the save so the payload is stored on the row — a retry from the
-  // admin can then re-post it without the browser-side pricing maths, which is
-  // gone by then. A failure here must never stop the quote going out.
-  let hexicomPayload = null;
+  // ── 0. Already recorded? ──────────────────────────────────────────────────
+  // If the lookup itself fails we record anyway: a duplicate row is a nuisance,
+  // a missing quote is what this whole route exists to prevent.
+  let alreadyRecorded = false;
   try {
-    hexicomPayload = buildOrder({ state, computed, testMode: process.env.HEXICOM_TEST_MODE === '1' });
+    const r = await fetch(`${SB_URL}/rest/v1/quotes?${quoteFilter}&select=quote_number&limit=1`, { headers: sbHeaders });
+    if (r.ok) alreadyRecorded = (await r.json()).length > 0;
+    else console.error('Supabase lookup failed:', r.status, await r.text().catch(() => ''));
   } catch (e) {
-    console.error('Hexicom payload build failed:', e.message);
+    console.error('Supabase lookup failed:', e.message);
   }
 
-  // ── 1. Save quote to Supabase ─────────────────────────────────────────────
-  try {
-    await fetch(`${SB_URL}/rest/v1/quotes`, {
-      method: 'POST',
-      headers: {
-        'apikey': SB_KEY,
-        'Authorization': `Bearer ${SB_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
-      },
-      body: JSON.stringify({
-        quote_number:     state.quoteNumber,
-        customer_name:    state.customerName    || null,
-        customer_company: state.customerCompany || null,
-        customer_email:   state.customerEmail   || null,
-        bind_category:    state.bindCategory,
-        bind_subtype:     state.bindSubtype,
-        leaf_size:        state.leafSize,
-        leaf_count:       parseInt(state.leafCount)     || 0,
-        gsm:              parseInt(state.leafGSMValue)  || 0,
-        spine_mm:         computed.spineMM,
-        wire_size:        computed.wireSize || null,
-        quantities:       state.qtys,
-        // `addon` is the Twin Loop cover added alongside a client's own cover (PVC, Polyprop, etc).
-        front_cover:      { name: state.frontCoverName, source: state.frontSource, collated: state.frontCollated, gsm: state.frontCoverGSM || null, addon: (state.frontAddonName && state.frontAddonName !== 'None') ? state.frontAddonName : null },
-        back_cover:       { name: state.backCoverName,  source: state.backSource,  collated: state.backCollated,  gsm: state.backCoverGSM || null,  addon: (state.backAddonName  && state.backAddonName  !== 'None') ? state.backAddonName  : null },
-        cello:            { type: state.celloType, cost: state.celloCost },
-        // Tab and sheet counts live under state.collating, keyed by the collating
-        // option that sets them — qtyTabs/qtyExtraSheets never existed, so every
-        // row until 2026-09-10 stored an empty inserts object.
-        inserts:          { tabs:   parseFloat((state.collating || {}).tabs)   || 0,
-                            sheets: parseFloat((state.collating || {}).sheets) || 0 },
-        extras:           state.selectedExtras,
-        totals:           computed.totals,
-        bind_edge:        state.bindEdge || null,
-        hexicom_payload:  hexicomPayload,
-        hexicom_status:   hexicomPayload ? null : 'skipped'
-      })
-    });
-  } catch (e) {
-    console.error('Supabase save failed:', e.message);
-  }
-
-  // ── 2. Build email ────────────────────────────────────────────────────────
-  // Note: the internal copy (step 4 below) always fires regardless of customerEmail —
-  // Twin Loop should get a record of every quote generated, including PDF downloads
-  // where the customer never asked for their own emailed copy.
-  const template  = getBindingTemplate(state.bindCategory, state.bindSubtype);
+  const template = getBindingTemplate(state.bindCategory, state.bindSubtype);
   const emailHtml = buildEmailHtml(state, template);
-
-  // ── 3. Build attachments ──────────────────────────────────────────────────
-  const attachments = [];
-
-  if (quotePdfBase64) {
-    attachments.push({
-      filename: `Quote-${state.quoteNumber}.pdf`,
-      content:  quotePdfBase64
-    });
-  }
-
-  const infoUrls = BINDING_INFO_PDF_URLS[state.bindCategory] || [];
-  for (const url of infoUrls) {
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const buf  = await resp.arrayBuffer();
-        const b64  = Buffer.from(buf).toString('base64');
-        const name = url.split('/').pop();
-        attachments.push({ filename: name, content: b64 });
-      }
-    } catch (e) {
-      console.error('Failed to fetch binding info PDF:', url, e.message);
-    }
-  }
-
+  const attachments = alreadyRecorded && recordOnly ? [] : await buildAttachments(state, quotePdfBase64);
   const emailPayload = (to, subject) => ({
     from:    'Twin Loop Binding <webquote@quote.twinloop.online>',
     to,
@@ -238,39 +184,80 @@ module.exports = async function handler(req, res) {
     ...(attachments.length > 0 ? { attachments } : {})
   });
 
-  // ── 4. Internal copy ──────────────────────────────────────────────────────
-  // Deliberately sent BEFORE the customer's copy and never gated on it. Twin Loop
-  // needs a record of every quote generated — including PDF downloads where the
-  // customer never asked for their own copy, and including quotes where the
-  // customer's own address turns out to be undeliverable.
-  //
-  // Ordering is what guarantees that. This used to sit after the customer send,
-  // which returned 500 on a Resend rejection and took quotes@twinloop.com.au's
-  // copy down with it — so a single mistyped customer address lost Twin Loop the
-  // quote entirely, with nothing on the thread to say so. A real 422 ("Invalid
-  // `to` field") was logged on this route between 19 Aug and 1 Sep 2026.
-  // Found after Wayne reported a missing MBE Parramatta quote, 2026-09-07.
-  const internalSubject = `New Quote ${state.quoteNumber} — ${state.customerName || 'Unknown'}${state.customerCompany ? ' (' + state.customerCompany + ')' : ''} — ${template.subjectType}`;
-  const internalRes = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(emailPayload(['quotes@twinloop.com.au'], internalSubject))
-  });
+  let saved = alreadyRecorded;
+  let hexicomResults = null;
 
-  // Logged, not returned: the customer's copy below still has to go out, and a
-  // failure here is Twin Loop's problem rather than the customer's. The result
-  // was previously discarded altogether, so an internal copy could fail on every
-  // quote and nothing anywhere would say so. This line is what makes it visible
-  // in Vercel's runtime errors.
-  if (!internalRes.ok) {
-    const err = await internalRes.json().catch(() => ({}));
-    console.error('Resend error (internal copy to quotes@twinloop.com.au):', err);
+  if (!alreadyRecorded) {
+    // Built before the save so the payloads are stored on the row — a retry from the
+    // admin can then re-post them without the browser-side pricing maths, which is
+    // gone by then. A failure here must never stop the quote going out.
+    let hexicomPayloads = null;
+    try {
+      hexicomPayloads = buildOrders({ state, computed, testMode: process.env.HEXICOM_TEST_MODE === '1' });
+    } catch (e) {
+      console.error('Hexicom payload build failed:', e.message);
+    }
+
+    // ── 1. Save quote to Supabase ───────────────────────────────────────────
+    // The response is checked now. It used to be discarded, so a rejected insert
+    // lost the quote from the admin with nothing anywhere to say so.
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/quotes`, {
+        method: 'POST',
+        headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify(quoteRow(state, computed, hexicomPayloads))
+      });
+      saved = r.ok;
+      if (!r.ok) console.error('Supabase save rejected:', r.status, (await r.text().catch(() => '')).slice(0, 500));
+    } catch (e) {
+      console.error('Supabase save failed:', e.message);
+    }
+
+    // ── 2. Internal copy ────────────────────────────────────────────────────
+    // Sent before the customer's copy and never gated on it, so a mistyped
+    // customer address can't cost Twin Loop its record of the quote. A real 422
+    // ("Invalid `to` field") did exactly that between 19 Aug and 1 Sep 2026.
+    const internalSubject = `New Quote ${state.quoteNumber} — ${state.customerName || 'Unknown'}${state.customerCompany ? ' (' + state.customerCompany + ')' : ''} — ${template.subjectType}` +
+      (saved ? '' : ' — NOT SAVED TO ADMIN');
+    try {
+      const internalRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(emailPayload(['quotes@twinloop.com.au'], internalSubject))
+      });
+      if (!internalRes.ok) {
+        const err = await internalRes.json().catch(() => ({}));
+        console.error('Resend error (internal copy to quotes@twinloop.com.au):', err);
+      }
+    } catch (e) {
+      console.error('Internal copy failed:', e.message);
+    }
+
+    // ── 3. Estimate Follow Up for high-value quotes ─────────────────────────
+    await sendFollowUp(state, computed, template, RESEND);
+
+    // ── 4. Post the orders to Hexicom ───────────────────────────────────────
+    // One order per quantity tier. Failures are recorded, not raised: the
+    // customer's quote has still gone out, and the admin can retry.
+    if (hexicomPayloads && hexicomPayloads.length) {
+      hexicomResults = await postOrders(hexicomPayloads);
+      if (saved) {
+        try {
+          await fetch(`${SB_URL}/rest/v1/quotes?${quoteFilter}`, {
+            method: 'PATCH',
+            headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+            body: JSON.stringify(hexicomColumns(hexicomResults))
+          });
+        } catch (e) {
+          console.error('Could not record Hexicom result:', e.message);
+        }
+      }
+    }
   }
 
   // ── 5. Send to customer ───────────────────────────────────────────────────
-  // Skipped for internalOnly requests (e.g. the customer clicked "Download PDF" rather
-  // than "Email Me This Quote") — only Twin Loop's internal copy is sent in that case.
-  if (!internalOnly && state.customerEmail) {
+  // Last, so a rejected customer address can no longer skip anything above.
+  if (!recordOnly && state.customerEmail) {
     const customerSubject = `Your ${template.subjectType} Quote ${state.quoteNumber} — Twin Loop Binding`;
     const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -285,78 +272,102 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // ── 5b. Estimate Follow Up for high-value quotes ──────────────────────────
-  // Wayne wants anything over $5k, $10k or $15k flagged to him so it gets chased
-  // rather than sitting in the pile. Banded on the highest quantity tier, ex GST,
-  // which is the largest figure the customer has actually been quoted.
+  const sentOrders = (hexicomResults || []).filter(r => r.ok);
+  return res.status(200).json({
+    success: true,
+    recorded: saved,
+    alreadyRecorded,
+    hexicom: hexicomResults ? { sent: sentOrders.length, of: hexicomResults.length, orderNos: sentOrders.map(r => r.orderNo) } : null
+  });
+};
+
+function quoteRow(state, computed, hexicomPayloads) {
+  return {
+    quote_number:     state.quoteNumber,
+    customer_name:    state.customerName    || null,
+    customer_company: state.customerCompany || null,
+    customer_email:   state.customerEmail   || null,
+    bind_category:    state.bindCategory,
+    bind_subtype:     state.bindSubtype,
+    leaf_size:        state.leafSize,
+    leaf_count:       parseInt(state.leafCount)     || 0,
+    gsm:              parseInt(state.leafGSMValue)  || 0,
+    spine_mm:         computed.spineMM,
+    wire_size:        computed.wireSize || null,
+    quantities:       state.qtys,
+    // `addon` is the Twin Loop cover added alongside a client's own cover (PVC, Polyprop, etc).
+    front_cover:      { name: state.frontCoverName, source: state.frontSource, collated: state.frontCollated, gsm: state.frontCoverGSM || null, addon: (state.frontAddonName && state.frontAddonName !== 'None') ? state.frontAddonName : null },
+    back_cover:       { name: state.backCoverName,  source: state.backSource,  collated: state.backCollated,  gsm: state.backCoverGSM || null,  addon: (state.backAddonName  && state.backAddonName  !== 'None') ? state.backAddonName  : null },
+    cello:            { type: state.celloType, cost: state.celloCost },
+    // Tab and sheet counts live under state.collating, keyed by the collating
+    // option that sets them — qtyTabs/qtyExtraSheets never existed, so every
+    // row until 2026-09-10 stored an empty inserts object.
+    inserts:          { tabs:   parseFloat((state.collating || {}).tabs)   || 0,
+                        sheets: parseFloat((state.collating || {}).sheets) || 0 },
+    extras:           state.selectedExtras,
+    totals:           computed.totals,
+    bind_edge:        state.bindEdge || null,
+    // One payload per quantity tier since 2026-09-24; older rows hold a single object.
+    hexicom_payload:  hexicomPayloads && hexicomPayloads.length ? hexicomPayloads : null,
+    hexicom_status:   hexicomPayloads && hexicomPayloads.length ? null : 'skipped'
+  };
+}
+
+async function buildAttachments(state, quotePdfBase64) {
+  const attachments = [];
+  if (quotePdfBase64) {
+    attachments.push({ filename: `Quote-${state.quoteNumber}.pdf`, content: quotePdfBase64 });
+  }
+  for (const url of BINDING_INFO_PDF_URLS[state.bindCategory] || []) {
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const b64 = Buffer.from(await resp.arrayBuffer()).toString('base64');
+        attachments.push({ filename: url.split('/').pop(), content: b64 });
+      }
+    } catch (e) {
+      console.error('Failed to fetch binding info PDF:', url, e.message);
+    }
+  }
+  return attachments;
+}
+
+// Wayne wants anything over $5k, $10k or $15k flagged to him so it gets chased
+// rather than sitting in the pile. Banded on the highest quantity tier, ex GST,
+// which is the largest figure the customer has actually been quoted.
+async function sendFollowUp(state, computed, template, RESEND) {
   try {
     const topValue = Math.max(...(computed.totals || []).map(t => Number(t.afterDisc) || 0), 0);
     const band = topValue >= 15000 ? 15000 : topValue >= 10000 ? 10000 : topValue >= 5000 ? 5000 : null;
-    if (band) {
-      const fmt = n => '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const tierRows = (state.qtys || []).map((q, i) =>
-        `<tr><td style="padding:4px 12px 4px 0;">Qty ${q}</td><td style="padding:4px 0;">${fmt((computed.totals[i] || {}).afterDisc || 0)} ex GST</td></tr>`
-      ).join('');
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from:    'Twin Loop Binding <webquote@quote.twinloop.online>',
-          to:      ['wayne@twinloop.com.au'],
-          subject: `Estimate Follow Up — ${state.quoteNumber} — ${state.customerCompany || state.customerName || 'Unknown'} — over ${fmt(band)}`,
-          html: `<div style="font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#222;line-height:1.7;">
-            <p style="margin:0 0 12px;font-weight:bold;font-size:16px;">Estimate Follow Up — over ${fmt(band)}</p>
-            <p style="margin:0 0 12px;">Quote <b>${state.quoteNumber}</b> has been issued at ${fmt(topValue)} ex GST.</p>
-            <table style="border-collapse:collapse;margin:0 0 12px;">
-              <tr><td style="padding:4px 12px 4px 0;">Customer</td><td style="padding:4px 0;">${state.customerName || '—'}${state.customerCompany ? ' (' + state.customerCompany + ')' : ''}</td></tr>
-              <tr><td style="padding:4px 12px 4px 0;">Email</td><td style="padding:4px 0;">${state.customerEmail || '—'}</td></tr>
-              <tr><td style="padding:4px 12px 4px 0;">Binding</td><td style="padding:4px 0;">${template.subjectType}</td></tr>
-              ${tierRows}
-            </table>
-            <p style="margin:0;color:#666;font-size:13px;">Sent automatically because the quote is over ${fmt(band)}.</p>
-          </div>`
-        })
-      });
-    }
+    if (!band) return;
+    const fmt = n => '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const tierRows = (state.qtys || []).map((q, i) =>
+      `<tr><td style="padding:4px 12px 4px 0;">Qty ${q}</td><td style="padding:4px 0;">${fmt((computed.totals[i] || {}).afterDisc || 0)} ex GST</td></tr>`
+    ).join('');
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from:    'Twin Loop Binding <webquote@quote.twinloop.online>',
+        to:      ['wayne@twinloop.com.au'],
+        subject: `Estimate Follow Up — ${state.quoteNumber} — ${state.customerCompany || state.customerName || 'Unknown'} — over ${fmt(band)}`,
+        html: `<div style="font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#222;line-height:1.7;">
+          <p style="margin:0 0 12px;font-weight:bold;font-size:16px;">Estimate Follow Up — over ${fmt(band)}</p>
+          <p style="margin:0 0 12px;">Quote <b>${state.quoteNumber}</b> has been issued at ${fmt(topValue)} ex GST.</p>
+          <table style="border-collapse:collapse;margin:0 0 12px;">
+            <tr><td style="padding:4px 12px 4px 0;">Customer</td><td style="padding:4px 0;">${state.customerName || '—'}${state.customerCompany ? ' (' + state.customerCompany + ')' : ''}</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Email</td><td style="padding:4px 0;">${state.customerEmail || '—'}</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Binding</td><td style="padding:4px 0;">${template.subjectType}</td></tr>
+            ${tierRows}
+          </table>
+          <p style="margin:0;color:#666;font-size:13px;">Sent automatically because the quote is over ${fmt(band)}.</p>
+        </div>`
+      })
+    });
   } catch (e) {
     console.error('Estimate Follow Up email failed:', e.message);
   }
-
-  // ── 6. Post the order to Hexicom ──────────────────────────────────────────
-  // Deliberately last, and deliberately swallowed: if Hexicom is down or slow the
-  // customer's quote has still gone out. The outcome is recorded against the
-  // quote so the admin can show what did and didn't reach the factory, and retry.
-  let hexicom = { ok: false, error: 'Payload could not be built' };
-  if (hexicomPayload) {
-    try {
-      hexicom = await postOrder(hexicomPayload);
-    } catch (e) {
-      hexicom = { ok: false, error: e.message };
-    }
-    try {
-      await fetch(`${SB_URL}/rest/v1/quotes?quote_number=eq.${encodeURIComponent(state.quoteNumber)}`, {
-        method: 'PATCH',
-        headers: {
-          'apikey': SB_KEY,
-          'Authorization': `Bearer ${SB_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify({
-          hexicom_status:   hexicom.ok ? 'sent' : 'failed',
-          hexicom_order_no: hexicom.orderNo || null,
-          hexicom_item_nos: hexicom.itemNos || null,
-          hexicom_sent_at:  new Date().toISOString(),
-          hexicom_error:    hexicom.ok ? null : String(hexicom.error || '').slice(0, 1000)
-        })
-      });
-    } catch (e) {
-      console.error('Could not record Hexicom result:', e.message);
-    }
-  }
-
-  return res.status(200).json({ success: true, hexicom: { sent: !!hexicom.ok, orderNo: hexicom.orderNo || null } });
-};
+}
 
 // ── Email HTML builder — template text only, quote is in the attached PDF ─────
 function buildEmailHtml(state, template) {

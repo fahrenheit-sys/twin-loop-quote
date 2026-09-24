@@ -963,6 +963,15 @@ function runCalculations() {
   // Stash for sendQuote()
   window._quoteComputed = { spineMM, wireSize: showWire ? wireSize : null, oversized, maxSpineMM, items: activeItems, totals, collatingLines, celloSetupFee, bindSetups, specialCustomer, specialDiscRate };
 
+  // A quote number is recorded the moment its estimate is shown. If the customer then
+  // goes Back and changes an answer, the regenerated estimate is a different quote and
+  // gets a new number, with the recorded one noted as the original — the same thing
+  // "Edit This Quote" does. Two different estimates never share a number.
+  if (recorded.number === state.quoteNumber && recorded.fingerprint !== quoteFingerprint()) {
+    state.revisedFrom = state.quoteNumber;
+    state.quoteNumber = generateQuoteNumber();
+  }
+
   const today = new Date();
   const valid = new Date(); valid.setDate(today.getDate() + 30);
 
@@ -1108,6 +1117,9 @@ function runCalculations() {
   </div>`;
 
   document.getElementById('active-question-container').innerHTML = html;
+
+  // Record it now rather than waiting for Email or Download — see recordQuote().
+  recordQuote();
   document.getElementById('input-area').style.display = 'none';
 }
 
@@ -1176,11 +1188,17 @@ async function sendQuote() {
   btn.textContent = 'Generating PDF…';
   btn.disabled = true;
 
-  let quotePdfBase64 = null;
-  try {
-    quotePdfBase64 = await generateQuotePdf();
-  } catch (e) {
-    console.warn('PDF generation failed, sending without attachment:', e);
+  // The quote is already being recorded (saved, copied to Twin Loop, sent to Hexicom)
+  // from the moment it was shown. Waiting for that first means this request only
+  // adds the customer's own copy, and reuses the PDF already made for it.
+  await recordQuote();
+  let quotePdfBase64 = recorded.pdf;
+  if (!quotePdfBase64) {
+    try {
+      quotePdfBase64 = await generateQuotePdf();
+    } catch (e) {
+      console.warn('PDF generation failed, sending without attachment:', e);
+    }
   }
 
   btn.textContent = 'Sending…';
@@ -1205,23 +1223,48 @@ async function sendQuote() {
   }
 }
 
-// ── Download PDF also notifies Twin Loop, even if the customer never clicks
-// "Email Me This Quote" — quotes@twinloop.com.au should get a copy of every estimate
-// generated, not just the ones the customer chooses to email themselves.
-let internalCopySent = false;
-async function sendInternalCopyOnDownload(quotePdfBase64) {
-  if (internalCopySent) return;
-  internalCopySent = true;
-  try {
-    await fetch('/api/send-quote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state, computed: window._quoteComputed, quotePdfBase64, internalOnly: true })
-    });
-  } catch (e) {
-    console.warn('Internal copy on download failed:', e);
-    internalCopySent = false;
-  }
+// ── Record every quote the moment it is shown ────────────────────────────────
+// Saves it to the admin, sends Twin Loop's copy to quotes@twinloop.com.au and posts it
+// to Hexicom — once per quote number, however many times the customer emails or
+// downloads it. Until 2026-09-24 this only happened on Email or Download, so a customer
+// who read the estimate on screen, printed it or wrote the number down and sent a PO
+// left no trace anywhere (2026-09-17-P798, Morgan Printing).
+let recorded = { number: null, fingerprint: null, promise: null, pdf: null };
+
+// What makes two estimates the same quote: every answer plus the prices they came to.
+function quoteFingerprint() {
+  const p = portableQuote(state);
+  delete p.from;
+  return JSON.stringify([p, (window._quoteComputed || {}).totals]);
+}
+
+function recordQuote(pdfBase64) {
+  if (recorded.number === state.quoteNumber && recorded.promise) return recorded.promise;
+  const number = state.quoteNumber;
+  recorded = { number, fingerprint: quoteFingerprint(), promise: null, pdf: pdfBase64 || null };
+
+  recorded.promise = (async () => {
+    // Twin Loop's copy carries the estimate only as the attached PDF, so make one
+    // unless the caller already has it. Without jsPDF it still records, unattached.
+    let pdf = recorded.pdf;
+    if (!pdf) {
+      try { pdf = await generateQuotePdf(); } catch (e) { console.warn('PDF for Twin Loop copy failed:', e); }
+      if (recorded.number === number) recorded.pdf = pdf;
+    }
+    try {
+      const res = await fetch('/api/send-quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state, computed: window._quoteComputed, quotePdfBase64: pdf, mode: 'record' })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+    } catch (e) {
+      // Let the next Email / Download click try again.
+      console.warn('Recording the quote failed:', e);
+      if (recorded.number === number) recorded.promise = null;
+    }
+  })();
+  return recorded.promise;
 }
 
 // Some browsers (notably iOS Safari) ignore a programmatic download that happens after an
@@ -1250,12 +1293,12 @@ async function downloadQuote() {
     a.click();
     document.body.removeChild(a);
     showPdfFallbackLink(url, filename);
-    sendInternalCopyOnDownload(pdf.output('datauristring').split(',')[1]);
+    recordQuote(pdf.output('datauristring').split(',')[1]);
   } catch (e) {
     // No jsPDF/html2canvas (blocked CDN) or a render failure — fall back to the browser's
     // own print-to-PDF, which is what this button used to do in every case.
     console.warn('PDF download failed, falling back to the print dialog:', e);
-    sendInternalCopyOnDownload(null);
+    recordQuote();
     window.print();
   } finally {
     if (btn) { btn.innerHTML = label; btn.disabled = false; }
@@ -1495,7 +1538,6 @@ function startFromUrlOrFresh() {
 function startEditFromCurrentQuote() {
   state.revisedFrom = state.quoteNumber;
   state.quoteNumber = generateQuoteNumber();
-  internalCopySent  = false;
   showReview();
 }
 

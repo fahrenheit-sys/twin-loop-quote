@@ -523,7 +523,7 @@ function openDetail(quoteNumber) {
         <div class="detail-row"><span class="detail-label">Spine</span><span class="detail-value">${r.spine_mm ? r.spine_mm + 'mm' : '—'}${r.wire_size ? ' → Wire: ' + r.wire_size : ''}</span></div>
         <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="badge badge-${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span></span></div>
         <div class="detail-row"><span class="detail-label">Hexicom</span><span class="detail-value">${hexicomBadge(r)}${r.hexicom_sent_at ? ' <span style="color:#888;font-size:12px;">' + new Date(r.hexicom_sent_at).toLocaleString('en-AU') + '</span>' : ''}</span></div>
-        ${r.hexicom_item_nos ? `<div class="detail-row"><span class="detail-label">Hexicom items</span><span class="detail-value" style="font-size:12px;">${esc(r.hexicom_item_nos)}</span></div>` : ''}
+        ${r.hexicom_item_nos ? `<div class="detail-row"><span class="detail-label">Hexicom orders</span><span class="detail-value" style="font-size:12px;">${hexicomOrdersHtml(r.hexicom_item_nos)}</span></div>` : ''}
         ${r.hexicom_error ? `<div class="detail-row"><span class="detail-label">Hexicom error</span><span class="detail-value" style="color:#c0392b;font-size:12px;word-break:break-word;">${esc(r.hexicom_error)}</span></div>` : ''}
       </div>
     </div>
@@ -570,9 +570,20 @@ function closeDetail() {
 function hexicomBadge(r) {
   const st = r.hexicom_status;
   if (st === 'sent')    return `<span class="badge badge-sent">Sent${r.hexicom_order_no ? ' ' + esc(r.hexicom_order_no) : ''}</span>`;
+  if (st === 'partial') return `<span class="badge badge-failed">Partly sent${r.hexicom_order_no ? ' ' + esc(r.hexicom_order_no) : ''}</span>`;
   if (st === 'failed')  return '<span class="badge badge-failed">Failed</span>';
   if (st === 'skipped') return '<span class="badge badge-skipped">Skipped</span>';
   return '<span class="badge badge-none">—</span>';
+}
+
+// Since 2026-09-24 a quote posts one order per quantity, and this column holds
+// the per-order results as JSON. Older rows hold Hexicom's raw item numbers.
+function hexicomOrdersHtml(v) {
+  let list = null;
+  try { list = JSON.parse(v); } catch { /* older row */ }
+  if (!Array.isArray(list) || !list.every(o => o && typeof o === 'object' && 'id' in o)) return esc(typeof v === 'string' ? v : JSON.stringify(v));
+  return list.map(o => `Qty ${esc(o.qty || '?')} — ${esc(o.id)}: ` +
+    (o.ok ? `<b>${esc(o.orderNo || 'sent')}</b>` : '<span style="color:#c0392b;">failed</span>')).join('<br>');
 }
 
 // Re-posting a quote that actually succeeded is safe: Hexicom enforces the
@@ -592,15 +603,17 @@ async function sendToHexicom() {
     });
     const data = await resp.json();
     if (resp.ok) {
-      note.textContent = 'Sent' + (data.orderNo ? ' — order ' + data.orderNo : '');
+      note.textContent = 'Sent' + (data.orderNo ? ' — ' + data.orderNo : '');
       selected.hexicom_status   = 'sent';
       selected.hexicom_order_no = data.orderNo || null;
       selected.hexicom_item_nos = data.itemNos || null;
       selected.hexicom_error    = null;
     } else {
-      note.textContent = 'Failed: ' + (data.error || 'Unknown error') +
+      note.textContent = (data.status === 'partial' ? 'Partly sent (' + data.orderNo + '). ' : '') +
+        'Failed: ' + (data.error || 'Unknown error') +
         (data.maybeDuplicate ? ' — Hexicom returns the same error for a duplicate, so check whether this order already exists before re-sending.' : '');
-      selected.hexicom_status = 'failed';
+      selected.hexicom_status = data.status === 'partial' ? 'partial' : 'failed';
+      if (data.orderNo) selected.hexicom_order_no = data.orderNo;
     }
   } catch (e) {
     note.textContent = 'Failed: ' + e.message;

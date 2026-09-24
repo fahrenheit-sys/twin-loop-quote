@@ -3,10 +3,11 @@
 // fixed. Re-posts the payload stored on the quote rather than rebuilding it: the
 // pricing split depends on figures that only exist in the browser at quote time.
 //
-// Retrying a send that actually succeeded is safe. Hexicom enforces
-// ExternalOrderID as unique, so the second attempt is rejected rather than
-// creating a duplicate job.
-const { postOrder } = require('../lib/hexicom');
+// A quote carries one order per quantity tier. Orders already recorded as sent
+// are skipped, so a retry only re-posts the ones that failed. Anything re-posted
+// that did in fact get through is rejected by Hexicom as a duplicate id rather
+// than creating a second job.
+const { postOrders, hexicomColumns, asPayloadList } = require('../lib/hexicom');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -26,7 +27,7 @@ module.exports = async function handler(req, res) {
   const sbHeaders = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` };
 
   const lookup = await fetch(
-    `${SB_URL}/rest/v1/quotes?quote_number=eq.${encodeURIComponent(quoteNumber)}&select=hexicom_payload,hexicom_status`,
+    `${SB_URL}/rest/v1/quotes?quote_number=eq.${encodeURIComponent(quoteNumber)}&select=hexicom_payload,hexicom_status,hexicom_item_nos`,
     { headers: sbHeaders }
   );
   if (!lookup.ok) return res.status(502).json({ error: 'Supabase error' });
@@ -34,31 +35,35 @@ module.exports = async function handler(req, res) {
   const rows = await lookup.json();
   if (!rows.length) return res.status(404).json({ error: 'Quote not found' });
 
-  const payload = rows[0].hexicom_payload;
-  if (!payload) {
+  const payloads = asPayloadList(rows[0].hexicom_payload);
+  if (!payloads.length) {
     return res.status(409).json({ error: 'No stored payload for this quote — it predates the Hexicom integration.' });
   }
 
-  const result = await postOrder(payload);
+  // Per-order results from earlier attempts, where the row has them. Rows from
+  // before 2026-09-24 hold a single order and store raw item numbers here instead.
+  let previous = [];
+  try {
+    const parsed = JSON.parse(rows[0].hexicom_item_nos || '[]');
+    if (Array.isArray(parsed) && parsed.every(r => r && typeof r === 'object' && 'id' in r)) previous = parsed;
+  } catch { /* not JSON — an older row */ }
+
+  const results = await postOrders(payloads, previous);
+  const cols = hexicomColumns(results);
 
   await fetch(`${SB_URL}/rest/v1/quotes?quote_number=eq.${encodeURIComponent(quoteNumber)}`, {
     method: 'PATCH',
     headers: { ...sbHeaders, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({
-      hexicom_status:   result.ok ? 'sent' : 'failed',
-      hexicom_order_no: result.orderNo || null,
-      hexicom_item_nos: result.itemNos || null,
-      hexicom_sent_at:  new Date().toISOString(),
-      hexicom_error:    result.ok ? null : String(result.error || '').slice(0, 1000),
-    }),
+    body: JSON.stringify(cols),
   });
 
-  if (!result.ok) {
+  if (cols.hexicom_status !== 'sent') {
     return res.status(502).json({
-      error: result.error,
-      status: result.status,
-      maybeDuplicate: !!result.maybeDuplicate,
+      error: cols.hexicom_error,
+      status: cols.hexicom_status,
+      orderNo: cols.hexicom_order_no,
+      maybeDuplicate: results.some(r => !r.ok && r.maybeDuplicate),
     });
   }
-  return res.status(200).json({ ok: true, orderNo: result.orderNo, itemNos: result.itemNos });
+  return res.status(200).json({ ok: true, orderNo: cols.hexicom_order_no, itemNos: cols.hexicom_item_nos });
 };
