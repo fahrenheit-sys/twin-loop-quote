@@ -386,7 +386,7 @@ function buildEmailHtml(state, template) {
 <div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.12);">
 
   <div style="padding:24px 32px;border-bottom:2px solid #000;display:flex;justify-content:space-between;align-items:center;">
-    <img src="https://www.twinloop.com.au/email/twinloop-logo@2x.png" height="45" alt="Twin Loop Binding">
+    <a href="https://www.twinloop.com.au"><img src="https://www.twinloop.com.au/email/twinloop-logo@2x.png" height="45" alt="Twin Loop Binding" style="border:0;"></a>
     <div style="text-align:right;">
       <div style="font-size:22px;font-weight:bold;letter-spacing:2px;">QUOTE</div>
       <div style="font-size:12px;color:#555;margin-top:2px;">${state.quoteNumber}</div>
