@@ -1,9 +1,12 @@
+// Public address of this tool — used for the edit link and guideline PDFs in emails.
+const PUBLIC_URL = process.env.PUBLIC_URL || 'https://quote.twinloop.com.au';
+
 // ── Binding info PDF URLs ─────────────────────────────────────────────────────
 // Each binding type can have one or more setup guide PDFs attached to quotes.
-const PERFECT_BINDING_GUIDELINES_PDF       = 'https://twin-loop-quote.vercel.app/perfect-binding-guidelines.pdf';
-const WIRE_BINDING_GUIDELINES_PDF          = 'https://twin-loop-quote.vercel.app/wire-binding-guidelines.pdf';
-const PLASTIC_SPIRAL_BINDING_GUIDELINES_PDF = 'https://twin-loop-quote.vercel.app/plastic-spiral-binding-guidelines.pdf';
-const CASE_BINDING_GUIDELINES_PDF           = 'https://twin-loop-quote.vercel.app/case-binding-guidelines.pdf';
+const PERFECT_BINDING_GUIDELINES_PDF       = `${PUBLIC_URL}/perfect-binding-guidelines.pdf`;
+const WIRE_BINDING_GUIDELINES_PDF          = `${PUBLIC_URL}/wire-binding-guidelines.pdf`;
+const PLASTIC_SPIRAL_BINDING_GUIDELINES_PDF = `${PUBLIC_URL}/plastic-spiral-binding-guidelines.pdf`;
+const CASE_BINDING_GUIDELINES_PDF           = `${PUBLIC_URL}/case-binding-guidelines.pdf`;
 
 const BINDING_INFO_PDF_URLS = {
   'Prefect Binding': [PERFECT_BINDING_GUIDELINES_PDF],
@@ -17,7 +20,6 @@ const BINDING_INFO_PDF_URLS = {
 // The customer's answers travel inside the link itself, so there is nothing to look up
 // and nothing to expire. index.html decodes this with the same field list (PORTABLE_FIELDS)
 // and rebuilds the quote as a new, editable one.
-const PUBLIC_URL = process.env.PUBLIC_URL || 'https://quote.twinloop.online';
 const PORTABLE_FIELDS = [
   'bindCategory', 'bindSubtype', 'wireColour', 'spiralColour', 'tentStandThickness',
   'qtys', 'leafSize', 'bindEdge', 'thicknessMethod', 'bookThicknessMM', 'leafCount', 'leafGSMValue',
@@ -384,7 +386,7 @@ function buildEmailHtml(state, template) {
 <div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.12);">
 
   <div style="padding:24px 32px;border-bottom:2px solid #000;display:flex;justify-content:space-between;align-items:center;">
-    <img src="https://www.twinloop.com.au/wp-content/uploads/2021/06/twinloop-header-logo-blueonwhite-@2x.png" height="45" alt="Twin Loop Binding">
+    <img src="https://www.twinloop.com.au/email/twinloop-logo@2x.png" height="45" alt="Twin Loop Binding">
     <div style="text-align:right;">
       <div style="font-size:22px;font-weight:bold;letter-spacing:2px;">QUOTE</div>
       <div style="font-size:12px;color:#555;margin-top:2px;">${state.quoteNumber}</div>

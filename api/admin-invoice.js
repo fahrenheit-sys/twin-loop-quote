@@ -12,7 +12,7 @@ module.exports = async function handler(req, res) {
   const orderId = parseInt(req.query.order, 10);
   if (!orderId) return res.status(400).json({ error: 'Missing order id' });
 
-  const base = process.env.WEBSITE_URL; // e.g. https://web.twinloop.online
+  const base = process.env.WEBSITE_URL; // e.g. https://www.twinloop.com.au
   const token = process.env.ADMIN_INVOICE_TOKEN;
   if (!base || !token) return res.status(500).json({ error: 'Invoice source not configured' });
 

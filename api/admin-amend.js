@@ -121,7 +121,7 @@ function buildAmendedEmailHtml(quote, amendmentNote, totals, bindLabel) {
 <div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.12);">
 
   <div style="padding:24px 32px;border-bottom:3px solid #e67e22;display:flex;justify-content:space-between;align-items:center;">
-    <img src="https://www.twinloop.com.au/wp-content/uploads/2021/06/twinloop-header-logo-blueonwhite-@2x.png" height="45" alt="Twin Loop Binding">
+    <img src="https://www.twinloop.com.au/email/twinloop-logo@2x.png" height="45" alt="Twin Loop Binding">
     <div style="text-align:right;">
       <div style="font-size:18px;font-weight:bold;letter-spacing:2px;color:#e67e22;">AMENDED QUOTE</div>
       <div style="font-size:12px;color:#555;margin-top:2px;">${quote.quote_number}</div>
