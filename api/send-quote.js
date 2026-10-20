@@ -177,7 +177,8 @@ module.exports = async function handler(req, res) {
   const emailHtml = buildEmailHtml(state, template);
   const attachments = alreadyRecorded && recordOnly ? [] : await buildAttachments(state, quotePdfBase64);
   const emailPayload = (to, subject) => ({
-    from:    'Twin Loop Binding <webquote@quote.twinloop.online>',
+    from:    'Twin Loop Binding <webquote@twinloop.com.au>',
+    reply_to: 'quotes@twinloop.com.au',
     to,
     subject,
     html:    emailHtml,
@@ -348,7 +349,7 @@ async function sendFollowUp(state, computed, template, RESEND) {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from:    'Twin Loop Binding <webquote@quote.twinloop.online>',
+        from:    'Twin Loop Binding <webquote@twinloop.com.au>',
         to:      ['wayne@twinloop.com.au'],
         subject: `Estimate Follow Up — ${state.quoteNumber} — ${state.customerCompany || state.customerName || 'Unknown'} — over ${fmt(band)}`,
         html: `<div style="font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#222;line-height:1.7;">

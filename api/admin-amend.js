@@ -70,7 +70,8 @@ module.exports = async function handler(req, res) {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from:    'Twin Loop Binding <webquote@quote.twinloop.online>',
+      from:    'Twin Loop Binding <webquote@twinloop.com.au>',
+      reply_to: 'quotes@twinloop.com.au',
       to:      [quote.customer_email],
       subject,
       html
@@ -87,7 +88,7 @@ module.exports = async function handler(req, res) {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${RESEND}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from:    'Quote Tool <webquote@quote.twinloop.online>',
+      from:    'Quote Tool <webquote@twinloop.com.au>',
       to:      ['quotes@twinloop.com.au'],
       subject: `[AMENDED SENT] ${quote.quote_number} — ${quote.customer_name || 'Unknown'}${quote.customer_company ? ' (' + quote.customer_company + ')' : ''}`,
       html
