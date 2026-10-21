@@ -1374,6 +1374,8 @@ function restoreQuote(payload) {
   state.leafMM = gsmToMM(state.leafGSMValue);
   state.tabMM  = gsmToMM(state.tabGSMValue);
 
+  // Quotes saved before 2026-10-21 hold "Matt - …"; the options are now "Matt Scuff Resistant - …".
+  if (/^Matt - /.test(state.celloType || '')) state.celloType = state.celloType.replace('Matt - ', 'Matt Scuff Resistant - ');
   const cello = (db['cello-glazing'] || []).find(c => c.label === state.celloType);
   state.celloCost  = cello ? parseFloat(cello.cost  || 0) : 0;
   state.celloSetup = cello ? parseFloat(cello.setup || 0) : 0;
