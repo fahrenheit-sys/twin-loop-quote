@@ -301,7 +301,8 @@ function bindCategoryLabel(cat) { return cat === 'Prefect Binding' ? 'Perfect Bi
 const SPECIAL_CUSTOMER_NAMES = {
   IPS:  'Innovative Print Solutions (IPS)',
   IVE:  'IVE Print Group (IVE)',
-  CMYK: 'CMYK Hub (CMYK)'
+  CMYK: 'CMYK Hub (CMYK)',
+  CBS:  'CBS Printing (CBS)'
 };
 function matchSpecialCustomer() {
   const raw = (state.customerCompany || '').trim().toLowerCase();
@@ -309,6 +310,7 @@ function matchSpecialCustomer() {
   if (/innovative print solutions/.test(raw) || /\bips\b/.test(raw))  return 'IPS';
   if (/ive print group/.test(raw)            || /\bive\b/.test(raw))  return 'IVE';
   if (/cmyk hub/.test(raw)                   || /\bcmyk\b/.test(raw)) return 'CMYK';
+  if (/cbs printing/.test(raw)               || /\bcbs\b/.test(raw))  return 'CBS';
   return null;
 }
 
@@ -939,10 +941,12 @@ function runCalculations() {
   }
   const minCharge = bindMin + (celloSetupFee > 0 ? 50 : 0);
 
-  // IVE and CMYK get an additional 10% off the whole quote, on top of the volume discount —
+  // IVE, CMYK and CBS get an additional 10% off the whole quote, on top of the volume discount —
   // shown as its own "Additional special discount for:" line, not compounded into it.
+  // CBS's 10% excludes Case Binding.
   const specialCustomer = matchSpecialCustomer();
-  const specialDiscRate = (specialCustomer === 'IVE' || specialCustomer === 'CMYK') ? 10 : 0;
+  const specialDiscRate = (specialCustomer === 'IVE' || specialCustomer === 'CMYK' ||
+                           (specialCustomer === 'CBS' && !isCase())) ? 10 : 0;
 
   const totals = state.qtys.map((q, idx) => {
     const discKey     = state.bindCategory === 'Case Binding' ? 'Case Binding' : isPerfect() ? 'Prefect Binding' : 'general';
