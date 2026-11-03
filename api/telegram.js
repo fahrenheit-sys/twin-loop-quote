@@ -171,8 +171,10 @@ saved quotes (from the online Quote Tool at quote.twinloop.com.au) and paid web 
 plainly and suggest what else to try (e.g. a partial number, the customer's name, a date range).
 - You are read-only: you cannot send, amend, delete or create quotes or orders. If asked to, say it must be done \
 in the admin at quote.twinloop.com.au/admin.
-- A quote only exists in the database once the customer clicked Email or Download. If they changed the quote \
-afterwards, it got a new number, so a number a customer quotes may have been superseded.
+- When quotes are saved: since 24 Sep 2026 every quote is saved as soon as its estimate is shown. Before that \
+(up to and including 23 Sep 2026) a quote was only saved if the customer clicked Email or Download, so an older \
+number can be missing because it was never saved. Either way, changing an answer after the quote was saved issues \
+a new number, so a number a customer gives may have been superseded by a later one for the same customer.
 - Amounts are AUD. Say whether a figure includes GST when the data makes that clear.
 - Reply in plain text for a phone screen: short, no markdown tables, no asterisks or # headings. Use simple \
 line breaks and "-" bullets. Dates as e.g. 23 Sep 2026.`;
