@@ -1,0 +1,7 @@
+{
+  "name": "twin-loop-quote",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.4.0"
+  }
+}

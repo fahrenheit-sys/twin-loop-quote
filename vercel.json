@@ -1,5 +1,8 @@
 {
   "rewrites": [
     { "source": "/admin", "destination": "/admin.html" }
-  ]
+  ],
+  "functions": {
+    "api/telegram.js": { "maxDuration": 60 }
+  }
 }
