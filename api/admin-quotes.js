@@ -9,12 +9,19 @@ module.exports = async function handler(req, res) {
   const SB_URL = process.env.SUPABASE_URL;
   const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-  const resp = await fetch(
-    `${SB_URL}/rest/v1/quotes?select=*&order=created_at.desc`,
-    { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } }
-  );
-
-  if (!resp.ok) return res.status(502).json({ error: 'Supabase error' });
-  const data = await resp.json();
+  // PostgREST caps each response at 1000 rows, so page until a short page comes back —
+  // otherwise older quotes silently vanish from the admin once there are more than 1000.
+  const PAGE = 1000;
+  const data = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const resp = await fetch(
+      `${SB_URL}/rest/v1/quotes?select=*&order=created_at.desc,quote_number.desc&limit=${PAGE}&offset=${offset}`,
+      { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } }
+    );
+    if (!resp.ok) return res.status(502).json({ error: 'Supabase error' });
+    const page = await resp.json();
+    data.push(...page);
+    if (page.length < PAGE) break;
+  }
   return res.status(200).json(data);
 };
