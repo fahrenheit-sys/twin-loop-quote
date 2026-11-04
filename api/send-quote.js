@@ -7,6 +7,8 @@ const PERFECT_BINDING_GUIDELINES_PDF       = `${PUBLIC_URL}/perfect-binding-guid
 const WIRE_BINDING_GUIDELINES_PDF          = `${PUBLIC_URL}/wire-binding-guidelines.pdf`;
 const PLASTIC_SPIRAL_BINDING_GUIDELINES_PDF = `${PUBLIC_URL}/plastic-spiral-binding-guidelines.pdf`;
 const CASE_BINDING_GUIDELINES_PDF           = `${PUBLIC_URL}/case-binding-guidelines.pdf`;
+const HALF_CANADIAN_GUIDELINES_PDF          = `${PUBLIC_URL}/half-canadian-setup-guidelines.pdf`;
+const FULL_CANADIAN_GUIDELINES_PDF          = `${PUBLIC_URL}/full-canadian-setup-guidelines.pdf`;
 
 const BINDING_INFO_PDF_URLS = {
   'Prefect Binding': [PERFECT_BINDING_GUIDELINES_PDF],
@@ -14,6 +16,14 @@ const BINDING_INFO_PDF_URLS = {
   'Wire Binding':   [WIRE_BINDING_GUIDELINES_PDF],
   'Plastic Spiral': [PLASTIC_SPIRAL_BINDING_GUIDELINES_PDF],
   'Comb':           [WIRE_BINDING_GUIDELINES_PDF],
+};
+
+// Finishes with their own cover set-up, attached on top of the binding type's guide.
+const BINDING_SUBTYPE_PDF_URLS = {
+  'Wire Binding': {
+    '1/2 Canadian':  [HALF_CANADIAN_GUIDELINES_PDF],
+    'Full Canadian': [FULL_CANADIAN_GUIDELINES_PDF],
+  },
 };
 
 // ── "Edit / duplicate this quote" link ────────────────────────────────────────
@@ -40,6 +50,20 @@ function quoteEditUrl(state) {
   const b64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   return `${PUBLIC_URL}/?quote=${b64}`;
+}
+
+// ── "Start a new quote" link ──────────────────────────────────────────────────
+// Carries only this customer's own contact details, and only ever goes to their inbox —
+// so returning customers skip retyping without the tool ever looking anyone up.
+function newQuoteUrl(state) {
+  const payload = {
+    customerName:    state.customerName,
+    customerCompany: state.customerCompany || '',
+    customerEmail:   state.customerEmail
+  };
+  const b64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${PUBLIC_URL}/?me=${b64}`;
 }
 
 const FAST_TRACK_DEFAULT = `<p>Should you wish to proceed with the quote please send us a purchase order with the quote number. (Samples are always helpful especially if collating is involved.) If your job is time critical please email us as soon as possible so we can prepare ourselves and allocate production time to help meet your deadline.</p>`;
@@ -321,7 +345,11 @@ async function buildAttachments(state, quotePdfBase64) {
   if (quotePdfBase64) {
     attachments.push({ filename: `Quote-${state.quoteNumber}.pdf`, content: quotePdfBase64 });
   }
-  for (const url of BINDING_INFO_PDF_URLS[state.bindCategory] || []) {
+  const pdfUrls = [
+    ...(BINDING_SUBTYPE_PDF_URLS[state.bindCategory]?.[state.bindSubtype] || []),
+    ...(BINDING_INFO_PDF_URLS[state.bindCategory] || [])
+  ];
+  for (const url of pdfUrls) {
     try {
       const resp = await fetch(url);
       if (resp.ok) {
@@ -378,6 +406,7 @@ function buildEmailHtml(state, template) {
   const fDate = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
   const customerName = state.customerName || 'there';
   const editUrl = quoteEditUrl(state);
+  const startUrl = newQuoteUrl(state);
 
   return `<!DOCTYPE html>
 <html>
@@ -424,6 +453,9 @@ function buildEmailHtml(state, template) {
     <p style="margin:0 0 8px;font-weight:bold;">Need to change something?</p>
     <p style="margin:0 0 14px;color:#444;">You can open this quote back up with your answers already filled in, change whatever you need &mdash; quantities, sizes, covers, extras &mdash; and we'll issue it to you as a new quote.</p>
     <a href="${editUrl}" style="display:inline-block;padding:12px 22px;background:#000;color:#fff;text-decoration:none;border-radius:4px;font-weight:bold;font-size:13px;">Edit or duplicate this quote &rarr;</a>
+    <p style="margin:22px 0 8px;font-weight:bold;">Quoting another job?</p>
+    <p style="margin:0 0 14px;color:#444;">This link starts a new quote with your contact details already filled in. Bookmark it to skip typing them next time.</p>
+    <a href="${startUrl}" style="display:inline-block;padding:12px 22px;background:#fff;color:#000;border:2px solid #000;text-decoration:none;border-radius:4px;font-weight:bold;font-size:13px;">Start a new quote &rarr;</a>
   </div>
 
   <div style="padding:24px 32px;font-size:13px;line-height:1.8;color:#333;">

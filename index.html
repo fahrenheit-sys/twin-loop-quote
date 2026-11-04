@@ -314,6 +314,93 @@ function matchSpecialCustomer() {
   return null;
 }
 
+// ── Returning customers ───────────────────────────────────────────────────────
+// Contact details are remembered in this browser, or arrive in the customer's own
+// "Start a new quote" email link. Deliberately never looked up from what someone types:
+// that would show one customer's details to anyone who guessed their company name.
+const CONTACT_KEY   = 'twinloop-contact';
+const CONTACT_PARAM = 'me';
+let knownContact = null;
+
+// Both sources can be tampered with and these values end up in innerHTML, so they are
+// checked here on the way in. Returns null unless there's a usable name and email.
+function cleanContact(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const text = v => String(v || '').replace(/[<>]/g, '').trim().slice(0, 120);
+  const customerName    = text(raw.customerName);
+  const customerCompany = text(raw.customerCompany);
+  const customerEmail   = String(raw.customerEmail || '').trim();
+  if (!customerName || customerEmail.length > 120) return null;
+  if (!/^[^\s@<>"'`]+@[^\s@<>"'`]+\.[^\s@<>"'`]+$/.test(customerEmail)) return null;
+  return { customerName, customerCompany, customerEmail };
+}
+
+// Storage can throw (private windows, blocked site data), and the tool must work without it.
+function loadContact() {
+  try { return cleanContact(JSON.parse(localStorage.getItem(CONTACT_KEY))); }
+  catch (e) { return null; }
+}
+function saveContact(src) {
+  const contact = cleanContact(src);
+  if (!contact) return;
+  try { localStorage.setItem(CONTACT_KEY, JSON.stringify(contact)); } catch (e) {}
+}
+function forgetContact() {
+  knownContact = null;
+  try { localStorage.removeItem(CONTACT_KEY); } catch (e) {}
+}
+
+// A link beats what's remembered: it's the one the customer has just chosen to open.
+function resolveKnownContact() {
+  const raw = new URLSearchParams(location.search).get(CONTACT_PARAM);
+  if (raw) {
+    try {
+      const fromLink = cleanContact(decodeQuotePayload(raw));
+      if (fromLink) { saveContact(fromLink); return fromLink; }
+    } catch (e) {
+      console.warn('Could not read the contact link:', e);
+    }
+  }
+  return loadContact();
+}
+
+function shouldConfirmContact(current) {
+  return current.id === 'customerName' && knownContact && !state.customerName && !state.returnToReview;
+}
+
+function renderContactConfirm(bSpace) {
+  document.getElementById('active-question-container').innerText = 'Almost done! Are these your details?';
+  bSpace.innerHTML = '';
+  bSpace.style.display = 'flex';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'width:100%;text-align:center;font-size:14px;line-height:1.7;margin-bottom:6px;';
+  [knownContact.customerName, knownContact.customerCompany, knownContact.customerEmail].filter(Boolean).forEach(line => {
+    const row = document.createElement('div');
+    row.textContent = line;
+    card.appendChild(row);
+  });
+  bSpace.appendChild(card);
+
+  bSpace.appendChild(createBtn('Yes, use these details', () => {
+    Object.assign(state, knownContact);
+    state.history.push(state.step);
+    state.step = steps.findIndex(st => st.id === 'calculate');
+    render();
+  }));
+  bSpace.appendChild(createBtn('Change details', () => {
+    Object.assign(state, knownContact);
+    render();
+  }));
+
+  const notYou = document.createElement('button');
+  notYou.type = 'button';
+  notYou.textContent = 'Not you? Clear these details';
+  notYou.style.cssText = 'width:100%;border:none;background:none;color:#555;text-decoration:underline;cursor:pointer;font-size:12px;font-family:inherit;margin-top:6px;';
+  notYou.onclick = () => { forgetContact(); render(); };
+  bSpace.appendChild(notYou);
+}
+
 // ── Contact popup (non-standard items are quoted manually) ─────────────────────
 const CONTACT_EMAIL = 'quotes@twinloop.com.au';
 const CASE_EXTRA_MSG = `Contact Twin Loop on <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> and provide details such as the size of foiling or debossing required.`;
@@ -389,7 +476,10 @@ function render() {
   [bSpace, nSpace, mSpace, dSpace, tSpace].forEach(s => s.style.display = 'none');
   document.getElementById('back-btn').style.display = state.history.length > 0 ? 'block' : 'none';
 
-  if (current.type === 'text-input') {
+  if (shouldConfirmContact(current)) {
+    renderContactConfirm(bSpace);
+
+  } else if (current.type === 'text-input') {
     tSpace.style.display = 'flex';
     const field = document.getElementById('text-input-field');
     field.value       = state[current.id] || '';
@@ -1124,6 +1214,8 @@ function runCalculations() {
 
   document.getElementById('active-question-container').innerHTML = html;
 
+  saveContact(state);
+
   // Record it now rather than waiting for Email or Download — see recordQuote().
   recordQuote();
   document.getElementById('input-area').style.display = 'none';
@@ -1526,6 +1618,7 @@ function regenerateFromReview() {
 // Entry point: an "Edit / duplicate this quote" link opens the review screen with the
 // customer's previous answers already filled in; anything else starts a fresh quote.
 function startFromUrlOrFresh() {
+  knownContact = resolveKnownContact();
   const raw = new URLSearchParams(location.search).get(EDIT_PARAM);
   if (!raw) return render();
   try {
