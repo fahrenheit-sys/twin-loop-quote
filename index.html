@@ -240,7 +240,12 @@ function collatingOptionsAvailable() {
     // how many sheets are in the book, but text collating is priced per 1,000
     // sheets — without a count the line collapses to its $50 minimum, which is all
     // Wayne was seeing. Ask for it on the option itself. Wayne, 2026-09-10.
-    if (opt.key === 'text') return [{ ...opt, needsLeaves: !(parseFloat(state.leafCount) > 0) }];
+    if (opt.key === 'text') {
+      const hand = needsHandCollate();
+      return [{ ...opt, needsLeaves: !(parseFloat(state.leafCount) > 0),
+                label: hand ? 'Collate text (hand collated)' : opt.label,
+                cost:  hand ? HAND_COLLATE_RATE : opt.cost }];
+    }
     if (opt.key === 'front_covers') return fYes ? [] : [{ ...opt, included: fInc }];
     if (opt.key === 'back_covers')  return bYes ? [] : [{ ...opt, included: bInc }];
     // The combined option can't be priced against a per-side surcharge — charging
@@ -252,6 +257,16 @@ function collatingOptionsAvailable() {
     }
     return [opt];
   });
+}
+// Text the collating machine can't take is hand collated: anything larger than A3,
+// smaller than A5, or heavier than 300gsm (any one is enough). Hand collating is
+// units x leaves / 1000 x $30, keeping the same $50 minimum. Wayne, 2026-11-10.
+const HAND_COLLATE_RATE = 30;
+const SIZE_RANK = { A6: 1, A5: 2, B5: 3, A4: 4, A3: 5, A2: 6, A1: 7, A0: 8 };
+function needsHandCollate() {
+  const r = SIZE_RANK[state.leafSize];
+  const sizeOut = r !== undefined && (r > SIZE_RANK.A3 || r < SIZE_RANK.A5);
+  return sizeOut || (parseFloat(state.leafGSMValue) || 0) > 300;
 }
 function gsmToMM(g) {
   const row = (db.gsm || []).find(x => String(x.GSM) === String(g));
@@ -1658,7 +1673,7 @@ async function loadPricing() {
     ]);
 
     // GSM
-    db.gsm = gsmRows.map(r => ({ GSM: r.gsm, MM: parseFloat(r.mm) }));
+    db.gsm = gsmRows.map(r => ({ GSM: r.gsm, MM: parseFloat(r.mm) })).sort((a, b) => a.GSM - b.GSM);
 
     // Imperial wire size table
     db.imperial = impRows
